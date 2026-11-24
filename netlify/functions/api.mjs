@@ -2,6 +2,8 @@
 import { store } from "../lib/store.mjs";
 
 const CURSES = ["meduse", "sphinx", "dedale", "brouillard", "tantale", "pandore"];
+const BOONS = { don5: 5, don10: 10, egide: 15, apollon: 8 };
+const ZEUS_BOONS = ["don5", "don10", "egide", "miroir", "apollon"];
 const MAX_GROUPS = 8;
 const ONLINE_MS = 20000;
 const FIRST_MINUTE_MS = 60000;
@@ -36,7 +38,7 @@ function publicGroup(g, now) {
   return { gid: g.gid, name: g.name, players: g.players, idx: g.idx, total: g.total, found: g.found, sesterces: g.sesterces,
     status: g.status, done: !!g.done, online: now - (g.updated || 0) < ONLINE_MS, protections: g.protections || {} };
 }
-function publicMeta(m) { return { code: m.code, cursesOn: m.cursesOn, disabled: m.disabled || [], ended: !!m.ended, total: m.total }; }
+function publicMeta(m) { return { code: m.code, cursesOn: m.cursesOn, boonsOn: m.boonsOn !== false, disabled: m.disabled || [], ended: !!m.ended, total: m.total }; }
 
 async function loadGame(s, code) {
   code = clean(code, 8).toUpperCase();
@@ -63,7 +65,7 @@ const routes = {
     if (clean(b.password, 60).toUpperCase() !== pass.toUpperCase()) return fail("Mot de passe incorrect.", 403);
     let code;
     for (let i = 0; i < 10; i++) { code = rand(4); if (!(await s.get(K(code).meta))) break; }
-    const meta = { code, created: Date.now(), cursesOn: true, disabled: [], ended: false, total: 8, profToken: rand(24) };
+    const meta = { code, created: Date.now(), cursesOn: true, boonsOn: true, disabled: [], ended: false, total: 8, profToken: rand(24) };
     await s.setJSON(K(code).meta, meta);
     return json({ code, profToken: meta.profToken, meta: publicMeta(meta) });
   },
@@ -94,6 +96,7 @@ const routes = {
       status: ["ready", "q", "res", "end"].includes(st.status) ? st.status : g.status,
       qStart: st.status === "q" ? num(st.qStart, now, now + 60000) : null, done: !!st.done,
       protections: { egide: num(st.protections?.egide, 0, 1), miroir: num(st.protections?.miroir, 0, 1) },
+      qid: num(st.qid, 0, 999), pending: Array.isArray(st.pending) ? st.pending.filter(x => typeof x === "string").slice(0, 6) : [],
       log: Array.isArray(st.log) ? st.log.slice(-40) : g.log, updated: now,
     });
     await s.setJSON(k.grp(g.gid), g);
@@ -149,12 +152,41 @@ const routes = {
     return json({ ok: true, curse: c });
   },
 
+  async boon(s, b) {
+    const [ctx, err] = await auth(s, b); if (err) return err;
+    const { meta, code, g } = ctx, k = K(code), now = Date.now();
+    if (meta.ended) return fail("La partie est terminée.");
+    if (meta.boonsOn === false) return fail("Les bienfaits sont suspendus par votre enseignant·e.");
+    const type = clean(b.type, 20);
+    if (!(type in BOONS)) return fail("Bienfait inconnu.");
+    const target = await s.get(k.grp(clean(b.target, 20)));
+    if (!target) return fail("Ce groupe n'existe pas.");
+    if (target.gid === g.gid) return fail("Un bienfait se donne aux autres !");
+    if (target.done) return fail(`${target.name} a déjà terminé la chasse.`);
+    const c = { id: tid(), kind: "boon", type, from: g.gid, fromName: g.name, to: target.gid, toName: target.name, ts: now };
+    await s.setJSON(k.curse(target.gid, c.id), c);
+    return json({ ok: true, boon: c });
+  },
+
+  async "prof/zeus"(s, b) {
+    const [ctx, err] = await authProf(s, b); if (err) return err;
+    const { code } = ctx, k = K(code), now = Date.now();
+    const target = await s.get(k.grp(clean(b.gid, 20)));
+    if (!target) return fail("Groupe introuvable.");
+    const type = clean(b.type, 20), kind = b.kind === "boon" ? "boon" : "curse";
+    if (kind === "curse" && !CURSES.includes(type)) return fail("Malédiction inconnue.");
+    if (kind === "boon" && !ZEUS_BOONS.includes(type)) return fail("Bienfait inconnu.");
+    const c = { id: tid(), kind, type, zeus: true, from: "zeus", fromName: "Zeus", to: target.gid, toName: target.name, ts: now, reason: clean(b.reason, 80) };
+    await s.setJSON(k.curse(target.gid, c.id), c);
+    return json({ ok: true, item: c });
+  },
+
   async "prof/board"(s, b) {
     const [ctx, err] = await authProf(s, b); if (err) return err;
     const { meta, code } = ctx, k = K(code), now = Date.now();
     const [groups, curses, adj] = await Promise.all([getAll(s, k.grpPrefix), getAll(s, k.cursePrefix()), getAll(s, `g/${code}/adj/`)]);
     return json({ meta: publicMeta(meta), now,
-      groups: groups.map(g => ({ ...publicGroup(g, now), log: g.log || [] })),
+      groups: groups.map(g => ({ ...publicGroup(g, now), log: g.log || [], qid: g.qid, qStart: g.qStart, pending: g.pending || [] })),
       curses: curses.map(({ _key, ...c }) => c).sort((a, b) => a.id < b.id ? 1 : -1).slice(0, 80),
       adj: adj.map(({ _key, ...a }) => a) });
   },
@@ -163,6 +195,7 @@ const routes = {
     const [ctx, err] = await authProf(s, b); if (err) return err;
     const { meta, code } = ctx;
     if (typeof b.cursesOn === "boolean") meta.cursesOn = b.cursesOn;
+    if (typeof b.boonsOn === "boolean") meta.boonsOn = b.boonsOn;
     if (Array.isArray(b.disabled)) meta.disabled = b.disabled.filter(t => CURSES.includes(t) || t === "miroir");
     await s.setJSON(K(code).meta, meta);
     return json({ ok: true, meta: publicMeta(meta) });

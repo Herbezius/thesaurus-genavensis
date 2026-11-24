@@ -1,6 +1,10 @@
 /* Thesaurus Genavensis — tableau de bord enseignant */
 (() => {
-const { QUIZ, CURSES } = window.TG;
+const { QUIZ, CURSES, BOONS, PROTECTIONS } = window.TG;
+const ZSEL = {}, ZMOT = {};
+const MOTIFS_MAL = ['On ne court pas au musée', 'On ne crie pas', 'On ne dérange pas les autres visiteurs', 'On ne touche pas les œuvres', 'On reste groupés', 'Téléphone utilisé hors du jeu'];
+const MOTIFS_BIEN = ['Bravo pour votre calme', 'Belle entraide', 'Excellente observation', 'Groupe exemplaire'];
+const mmss = ms => { const t = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}` };
 const ZONES = ['cour', '113', '114', '115', '0203', '408'];
 const ZLAB = { cour: 'Cour lapidaire (107-109)', '113': 'Salle 113', '114': 'Salle 114', '115': 'Salle 115', '0203': 'Salle 0203 (niveau inférieur)', '408': 'Salle 408 (beaux-arts)' };
 const PKEY = 'thesaurus-prof-v1', RKEY = 'thesaurus-reperage-v2';
@@ -32,7 +36,7 @@ function render() {
   if (!P) { a.innerHTML = loginHtml(); bindLogin(); return }
   a.innerHTML = `
 <header class="top"><div><div class="eyebrow">Espace enseignant</div><h1>Thesaurus Genavensis</h1></div>
- <div class="tabs" role="group" aria-label="Rubriques">${[['live', 'Partie en direct'], ['rep', 'Repérage'], ['sol', 'Solutions']].map(([k, l]) => `<button data-t="${k}" aria-pressed="${TAB === k}">${l}</button>`).join('')}</div></header>
+ <div class="tabs" role="group" aria-label="Rubriques">${[['live', 'Olympe'], ['rep', 'Repérage'], ['sol', 'Solutions']].map(([k, l]) => `<button data-t="${k}" aria-pressed="${TAB === k}">${l}</button>`).join('')}</div></header>
 <div id="tab"></div>`;
   a.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { TAB = b.dataset.t; render() });
   if (TAB === 'live') drawLive(); else if (TAB === 'rep') drawRep(); else drawSol();
@@ -71,8 +75,10 @@ function drawLive() {
  </section>
  <section class="card" id="settings"></section>
 </div>
-<section class="card"><div class="top"><h2>Groupes</h2><span class="small muted" id="upd"></span></div><div class="scroll" id="groups"><p class="muted">Chargement…</p></div></section>
-<section class="card"><h2>Malédictions en direct</h2><div class="feed" id="feed"></div></section>
+<section style="display:grid;gap:10px"><div class="top"><h2>L'Olympe · vue de Zeus</h2><span class="small muted" id="upd"></span></div>
+ <p class="small muted">Chaque carte montre où en est le groupe. Le menu de Zeus envoie une malédiction (elle ignore les protections et les règles), un bienfait ou des sesterces.</p>
+ <div class="olympe" id="groups"><p class="muted">Chargement…</p></div></section>
+<section class="card"><h2>Malédictions et bienfaits en direct</h2><div class="feed" id="feed"></div></section>
 <section class="card"><h2>Fin de partie</h2>
  <p class="small muted">Efface toutes les données de la partie (groupes, scores, malédictions). Les téléphones des élèves affichent alors « partie fermée ». Sans action de votre part, tout est effacé automatiquement après 48 heures.</p>
  <button class="btn ghost" id="end">Terminer et effacer la partie</button></section>`;
@@ -89,24 +95,51 @@ function fillLive() {
   const st = $('#settings');
   if (!st.contains(document.activeElement)) {
     st.innerHTML = `<h2>Réglages</h2>
-   <label class="switch"><input type="checkbox" id="con" ${m.cursesOn ? 'checked' : ''}> Malédictions actives</label>
+   <label class="switch"><input type="checkbox" id="con" ${m.cursesOn ? 'checked' : ''}> Malédictions entre groupes</label>
+   <label class="switch"><input type="checkbox" id="bon" ${m.boonsOn ? 'checked' : ''}> Bienfaits entre groupes</label>
    <p class="small muted">Désactiver certaines malédictions ou le Miroir :</p>
    <div style="display:grid;gap:6px">${[...Object.entries(CURSES).map(([k, c]) => [k, c.nom]), ['miroir', 'Miroir de Persée (protection)']].map(([k, n]) => `<label class="switch"><input type="checkbox" data-d="${k}" ${m.disabled.includes(k) ? '' : 'checked'}> ${esc(n)}</label>`).join('')}</div>`;
     $('#con').onchange = e => setSettings({ cursesOn: e.target.checked });
+    $('#bon').onchange = e => setSettings({ boonsOn: e.target.checked });
     st.querySelectorAll('[data-d]').forEach(c => c.onchange = () => setSettings({ disabled: [...st.querySelectorAll('[data-d]')].filter(x => !x.checked).map(x => x.dataset.d) }));
   }
   const gs = BD.groups.slice().sort((a, b) => b.found - a.found || b.sesterces - a.sesterces);
-  $('#groups').innerHTML = gs.length ? `<table><thead><tr><th>#</th><th>Groupe</th><th>Avancée</th><th class="n">Trésors</th><th class="n">Sesterces</th><th>Protections</th><th>Ajuster</th></tr></thead><tbody>
-  ${gs.map((g, i) => `<tr><td>${i + 1}</td><td><b>${esc(g.name)}</b><br><span class="small muted">${g.players.map(esc).join(', ')}</span>
-    ${g.log && g.log.length ? `<details><summary class="small">Journal</summary><div class="small">${g.log.slice().reverse().map(l => `<div>${hm(l.t)} · ${esc(l.text)}</div>`).join('')}</div></details>` : ''}</td>
-   <td>${g.done ? '<span class="badge">Terminé</span>' : `Énigme ${Math.min(g.idx + 1, g.total)}/${g.total}`}${g.online || g.done ? '' : '<br><span class="err small">hors ligne</span>'}</td>
-   <td class="n">${g.found}</td><td class="n">${g.sesterces}</td>
-   <td class="small">${[g.protections.egide ? 'Égide' : '', g.protections.miroir ? 'Miroir' : ''].filter(Boolean).join(', ') || '—'}</td>
-   <td><div class="row"><button class="btn ghost sm" data-adj="${g.gid}" data-a="-10">−10</button><button class="btn ghost sm" data-adj="${g.gid}" data-a="5">+5</button></div></td></tr>`).join('')}
-  </tbody></table>` : '<p class="muted">Aucun groupe pour l\'instant. Donnez le code aux élèves.</p>';
-  $('#groups').querySelectorAll('[data-adj]').forEach(b => b.onclick = async () => {
-    const a = +b.dataset.a; try { await api('prof/adjust', { ...auth(), gid: b.dataset.adj, amount: a, reason: a < 0 ? 'Pénalité de l\'enseignant·e' : 'Bonus de l\'enseignant·e' }); toast(`${a > 0 ? '+' : ''}${a} sesterces envoyés.`) } catch (x) { toast(x.message) } });
-  $('#feed').innerHTML = BD.curses.length ? BD.curses.map(c => `<div><span class="muted small">${hm(c.ts)}</span> <b>${esc(c.fromName)}</b> → <b>${esc(c.toName)}</b> : ${c.type === 'note' ? esc(c.text) : esc(CURSES[c.type]?.nom || c.type) + (c.reflected ? ' <span class="small" style="color:var(--curse)">(renvoyée par le Miroir)</span>' : '')}</div>`).join('') : '<p class="muted">Aucune malédiction pour l\'instant.</p>';
+  const box = $('#groups');
+  if (!box.contains(document.activeElement)) {
+    const zeusOpts = `<option value="">Action de Zeus…</option>
+      <optgroup label="Foudre (malédiction)">${Object.entries(CURSES).map(([k, c]) => `<option value="curse:${k}">${esc(c.nom)}</option>`).join('')}</optgroup>
+      <optgroup label="Bienfait">${['don5', 'don10', 'egide', 'apollon'].map(k => `<option value="boon:${k}">${esc(BOONS[k].nom)}</option>`).join('')}<option value="boon:miroir">${esc(PROTECTIONS.miroir.nom)}</option></optgroup>
+      <optgroup label="Sesterces">${[5, 10, -5, -10].map(n => `<option value="adj:${n}">${n > 0 ? '+' : '−'}${Math.abs(n)} sesterces</option>`).join('')}</optgroup>`;
+    const motifOpts = `<option value="">Sans motif</option><optgroup label="Rappel à l'ordre">${MOTIFS_MAL.map(m => `<option>${esc(m)}</option>`).join('')}</optgroup><optgroup label="Félicitations">${MOTIFS_BIEN.map(m => `<option>${esc(m)}</option>`).join('')}</optgroup>`;
+    const label = { ready: 'Entre deux énigmes', q: 'En recherche', res: 'Vient de répondre', end: 'Terminé' };
+    box.innerHTML = gs.length ? gs.map((g, i) => { const q = QUIZ.find(x => x.id === g.qid);
+      const prot = [g.protections.egide ? 'Égide' : '', g.protections.miroir ? 'Miroir' : ''].filter(Boolean).join(' · ');
+      const pend = (g.pending || []).map(k => CURSES[k] ? CURSES[k].nom : k === 'apollon' ? 'Faveur d\'Apollon' : k).join(', ');
+      return `<article class="gcard ${g.online || g.done ? '' : 'off'} ${g.done ? 'done' : ''}">
+       <div class="hd"><b>${i + 1}. ${esc(g.name)}</b><span class="dot ${g.online || g.done ? '' : 'off'}" title="${g.online ? 'en ligne' : 'hors ligne'}"></span></div>
+       <div class="small muted">${g.players.map(esc).join(', ')}${g.online || g.done ? '' : ' · <span class="err">hors ligne</span>'}</div>
+       <div class="stats"><span><b>${g.found}</b> trésors</span><span><b>${g.sesterces}</b> S</span><span>${g.done ? 'Fini' : `Énigme <b>${Math.min(g.idx + 1, g.total)}</b>/${g.total}`}</span></div>
+       ${g.done ? '' : `<div class="now">${label[g.status] || ''}${q ? ` · <b>${esc(q.titre)}</b> <span class="muted small">(${esc(q.salle)})</span>` : ''}${g.status === 'q' && g.qStart ? ` · depuis <span class="w">${mmss(BD.now - g.qStart)}</span>` : ''}</div>`}
+       ${prot ? `<div class="small">Protégé : ${prot}</div>` : ''}${pend ? `<div class="small" style="color:var(--curse)">En attente : ${esc(pend)}</div>` : ''}
+       <div class="zeus"><select data-z="${g.gid}" aria-label="Action de Zeus pour ${esc(g.name)}">${zeusOpts}</select></div>
+       <div class="zeus"><select data-m="${g.gid}" aria-label="Motif pour ${esc(g.name)}">${motifOpts}</select><button class="btn sm" data-zgo="${g.gid}">Envoyer</button></div>
+       ${g.log && g.log.length ? `<details><summary class="small">Journal du groupe</summary><div class="small">${g.log.slice().reverse().map(l => `<div>${hm(l.t)} · ${esc(l.text)}</div>`).join('')}</div></details>` : ''}
+      </article>` }).join('') : '<p class="muted">Aucun groupe pour l\'instant. Donnez le code aux élèves.</p>';
+    box.querySelectorAll('[data-z]').forEach(sel => { if (ZSEL[sel.dataset.z]) sel.value = ZSEL[sel.dataset.z]; sel.onchange = () => { ZSEL[sel.dataset.z] = sel.value } });
+    box.querySelectorAll('[data-m]').forEach(sel => { if (ZMOT[sel.dataset.m]) sel.value = ZMOT[sel.dataset.m]; sel.onchange = () => { ZMOT[sel.dataset.m] = sel.value } });
+    box.querySelectorAll('[data-zgo]').forEach(btn => btn.onclick = () => zeus(btn.dataset.zgo, box.querySelector(`[data-z="${btn.dataset.zgo}"]`).value, box.querySelector(`[data-m="${btn.dataset.zgo}"]`).value));
+  }
+  const nomOf = c => c.type === 'note' ? esc(c.text) : c.kind === 'boon' ? '<span style="color:var(--verd)">' + esc((BOONS[c.type] || PROTECTIONS[c.type] || {}).nom || c.type) + '</span>' : esc(CURSES[c.type]?.nom || c.type) + (c.reflected ? ' <span class="small" style="color:var(--curse)">(renvoyée par le Miroir)</span>' : '');
+  $('#feed').innerHTML = BD.curses.length ? BD.curses.map(c => `<div><span class="muted small">${hm(c.ts)}</span> <b>${c.zeus ? 'Zeus' : esc(c.fromName)}</b> → <b>${esc(c.toName)}</b> : ${nomOf(c)}${c.reason ? ` <span class="small muted">(${esc(c.reason)})</span>` : ''}</div>`).join('') : '<p class="muted">Rien pour l\'instant.</p>';
+}
+async function zeus(gid, v, motif) {
+  if (!v) { toast('Choisissez d\'abord une action.'); return }
+  const [kind, type] = v.split(':'); const g = BD.groups.find(x => x.gid === gid);
+  try {
+    if (kind === 'adj') await api('prof/adjust', { ...auth(), gid, amount: +type, reason: (+type < 0 ? 'Colère de Zeus' : 'Générosité de Zeus') + (motif ? ' : ' + motif : '') });
+    else await api('prof/zeus', { ...auth(), gid, kind, type, reason: motif });
+    toast(`Zeus a frappé : ${g ? g.name : ''}.`); ZSEL[gid] = ''; ZMOT[gid] = ''; poll();
+  } catch (x) { toast(x.message) }
 }
 async function setSettings(b) { try { const r = await api('prof/settings', { ...auth(), ...b }); BD.meta = r.meta; toast('Réglages enregistrés.') } catch (x) { toast(x.message) } }
 async function poll() {

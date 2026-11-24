@@ -3,7 +3,14 @@
 Chasse au trésor et guerre des malédictions au Musée d'art et d'histoire de Genève, pour des groupes de 2 à 3 élèves (4 à 8 groupes par partie).
 
 - `/` : le jeu des élèves (code de partie, 8 énigmes, Temple des malédictions)
-- `/prof.html` : le tableau de bord enseignant (créer une partie, suivi en direct, réglages, repérage, solutions)
+- `/prof.html` : l'espace enseignant. L'Olympe (vue de Zeus) suit chaque groupe en direct et permet d'envoyer une malédiction, un bienfait ou des sesterces, avec un motif (« On ne court pas au musée »…). S'y trouvent aussi les réglages, le repérage et les solutions.
+
+## Mécanique
+
+- Malédictions (Temple) : Méduse, Sphinx, Labyrinthe de Dédale, Brouillard des Enfers, Supplice de Tantale, Boîte de Pandore.
+- Protections : Égide d'Athéna (annule), Miroir de Persée (renvoie).
+- Bienfaits pour aider un autre groupe : offrandes d'Hermès (5 ou 10 sesterces), Égide offerte, Faveur d'Apollon (salle révélée).
+- Zeus (l'enseignant·e) ignore les règles et les protections.
 
 ## Mise en ligne sur Netlify
 

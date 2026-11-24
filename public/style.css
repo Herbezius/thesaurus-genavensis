@@ -163,3 +163,20 @@ td.n,th.n{font-family:var(--mono);text-align:right;white-space:nowrap;font-varia
 .switch{display:flex;gap:10px;align-items:center;font-size:16px;color:var(--ink)}
 .switch input{width:22px;height:22px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+/* Olympe (tableau de bord) */
+.olympe{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:12px}
+.gcard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;display:grid;gap:8px;min-width:0}
+.gcard.off{border-style:dashed}
+.gcard.done{background:var(--verd-soft)}
+.gcard .hd{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.gcard .hd b{font-size:18px;overflow-wrap:anywhere}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--ok);display:inline-block;flex:none}
+.dot.off{background:var(--bad)}
+.stats{display:flex;gap:14px;flex-wrap:wrap;font-family:var(--mono);font-size:14px}
+.stats span b{font-size:20px;color:var(--ink)}
+.now{font-size:15px}
+.now .w{font-family:var(--mono);color:var(--gold)}
+.zeus{display:flex;gap:6px}
+.gcard>*{min-width:0}
+.zeus select{flex:1;width:0;min-width:0;font:inherit;font-size:15px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px}
+.zeus .btn{background:var(--gold)}

@@ -93,6 +93,12 @@ PROTECTIONS = {
  "egide": dict(nom="Égide d'Athéna", prix=15, desc="Annule la prochaine malédiction reçue."),
  "miroir": dict(nom="Miroir de Persée", prix=25, desc="Renvoie automatiquement la prochaine malédiction à son expéditeur."),
 }
-out = "/* Données du jeu (générées par tools/build_data.py) */\nwindow.TG=" + json.dumps(dict(QUIZ=QUIZ, SPHINX=SPHINX, CURSES=CURSES, PROTECTIONS=PROTECTIONS), ensure_ascii=False) + ";\n"
+BOONS = {
+ "don5": dict(nom="Offrande d'Hermès", prix=5, desc="Offrez 5 de vos sesterces au groupe choisi."),
+ "don10": dict(nom="Grande offrande d'Hermès", prix=10, desc="Offrez 10 de vos sesterces au groupe choisi."),
+ "egide": dict(nom="Égide offerte", prix=15, desc="Le groupe choisi reçoit une Égide d'Athéna, qui annule sa prochaine malédiction."),
+ "apollon": dict(nom="Faveur d'Apollon", prix=8, desc="Révèle tout de suite la salle de l'énigme du groupe choisi, même sous le Brouillard des Enfers."),
+}
+out = "/* Données du jeu (générées par tools/build_data.py) */\nwindow.TG=" + json.dumps(dict(QUIZ=QUIZ, SPHINX=SPHINX, CURSES=CURSES, PROTECTIONS=PROTECTIONS, BOONS=BOONS), ensure_ascii=False) + ";\n"
 pathlib.Path(sys.argv[2]).write_text(out)
 print("ok", len(QUIZ), len(SPHINX))
