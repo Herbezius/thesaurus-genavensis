@@ -38,7 +38,7 @@ function publicGroup(g, now) {
   return { gid: g.gid, name: g.name, players: g.players, idx: g.idx, total: g.total, found: g.found, sesterces: g.sesterces,
     status: g.status, done: !!g.done, online: now - (g.updated || 0) < ONLINE_MS, protections: g.protections || {} };
 }
-function publicMeta(m) { return { code: m.code, cursesOn: m.cursesOn, boonsOn: m.boonsOn !== false, disabled: m.disabled || [], ended: !!m.ended, total: m.total }; }
+function publicMeta(m) { return { code: m.code, started: m.started !== false, startedAt: m.startedAt || null, cursesOn: m.cursesOn, boonsOn: m.boonsOn !== false, disabled: m.disabled || [], ended: !!m.ended, total: m.total }; }
 
 async function loadGame(s, code) {
   code = clean(code, 8).toUpperCase();
@@ -65,7 +65,7 @@ const routes = {
     if (clean(b.password, 60).toUpperCase() !== pass.toUpperCase()) return fail("Mot de passe incorrect.", 403);
     let code;
     for (let i = 0; i < 10; i++) { code = rand(4); if (!(await s.get(K(code).meta))) break; }
-    const meta = { code, created: Date.now(), cursesOn: true, boonsOn: true, disabled: [], ended: false, total: 8, profToken: rand(24) };
+    const meta = { code, created: Date.now(), cursesOn: true, boonsOn: true, disabled: [], ended: false, started: false, total: 8, profToken: rand(24) };
     await s.setJSON(K(code).meta, meta);
     return json({ code, profToken: meta.profToken, meta: publicMeta(meta) });
   },
@@ -75,7 +75,7 @@ const routes = {
     if (!meta) return fail("Partie introuvable. Vérifiez le code donné par votre enseignant·e.", 404);
     if (meta.ended) return fail("Cette partie est terminée.");
     const name = clean(b.name, 30);
-    const players = (Array.isArray(b.players) ? b.players : []).map(p => clean(p, 20)).filter(Boolean).slice(0, 3);
+    const players = (Array.isArray(b.players) ? b.players : []).map(p => clean(p, 20)).filter(Boolean).slice(0, 4);
     if (!name) return fail("Donnez un nom à votre groupe.");
     if (players.length < 2) return fail("Indiquez au moins deux joueurs.");
     const groups = await getAll(s, K(code).grpPrefix);
@@ -126,6 +126,7 @@ const routes = {
       return json({ ok: true, curse: c });
     }
     if (!CURSES.includes(type)) return fail("Malédiction inconnue.");
+    if (meta.started === false) return fail("La partie n'a pas encore commencé.");
     if (b.reflect) {
       const c = { ...base, type, reflected: true };
       await s.setJSON(k.curse(target.gid, c.id), c);
@@ -156,6 +157,7 @@ const routes = {
     const [ctx, err] = await auth(s, b); if (err) return err;
     const { meta, code, g } = ctx, k = K(code), now = Date.now();
     if (meta.ended) return fail("La partie est terminée.");
+    if (meta.started === false) return fail("La partie n'a pas encore commencé.");
     if (meta.boonsOn === false) return fail("Les bienfaits sont suspendus par votre enseignant·e.");
     const type = clean(b.type, 20);
     if (!(type in BOONS)) return fail("Bienfait inconnu.");
@@ -198,6 +200,13 @@ const routes = {
     if (typeof b.boonsOn === "boolean") meta.boonsOn = b.boonsOn;
     if (Array.isArray(b.disabled)) meta.disabled = b.disabled.filter(t => CURSES.includes(t) || t === "miroir");
     await s.setJSON(K(code).meta, meta);
+    return json({ ok: true, meta: publicMeta(meta) });
+  },
+
+  async "prof/start"(s, b) {
+    const [ctx, err] = await authProf(s, b); if (err) return err;
+    const { meta, code } = ctx;
+    if (meta.started === false) { meta.started = true; meta.startedAt = Date.now(); await s.setJSON(K(code).meta, meta); }
     return json({ ok: true, meta: publicMeta(meta) });
   },
 

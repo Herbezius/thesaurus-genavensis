@@ -48,7 +48,7 @@ function loginHtml() { return `
  <label for="pw">Mot de passe enseignant<input type="password" id="pw" autocomplete="current-password"></label>
  <button class="btn" id="create">Créer la partie</button>
  <p class="err" id="lerr" hidden></p>
- <p class="small muted">Un code de partie est créé. Les groupes le tapent sur leur téléphone (ou scannent le QR code) pour rejoindre la chasse.</p>
+ <p class="small muted">Un code de partie est créé. Les groupes (2 à 4 joueurs) le tapent sur leur téléphone (ou scannent le QR code) pour rejoindre la chasse.</p>
 </section>
 <section class="card" style="max-width:520px">
  <h2>Reprendre une partie</h2>
@@ -75,6 +75,7 @@ function drawLive() {
  </section>
  <section class="card" id="settings"></section>
 </div>
+<section class="card" id="startbox"></section>
 <section style="display:grid;gap:10px"><div class="top"><h2>L'Olympe · vue de Zeus</h2><span class="small muted" id="upd"></span></div>
  <p class="small muted">Chaque carte montre où en est le groupe. Le menu de Zeus envoie une malédiction (elle ignore les protections et les règles), un bienfait ou des sesterces.</p>
  <div class="olympe" id="groups"><p class="muted">Chargement…</p></div></section>
@@ -92,6 +93,10 @@ function fillLive() {
   if (!BD) return;
   $('#upd').textContent = 'Mis à jour à ' + hm(BD.now);
   const m = BD.meta;
+  const sb = $('#startbox');
+  sb.innerHTML = m.started ? `<div class="top"><h2>Partie lancée</h2><span class="pill v">depuis ${mmss(BD.now - (m.startedAt || BD.now))}</span></div>`
+    : `<h2>Départ</h2><p>${BD.groups.length} groupe${BD.groups.length > 1 ? 's' : ''} connecté${BD.groups.length > 1 ? 's' : ''}. Les élèves voient « Démarrer l'aventure » grisé tant que vous n'avez pas donné le départ.</p><button class="btn gold" id="start" ${BD.groups.length ? '' : 'disabled'}>Donner le départ</button>`;
+  const stb = $('#start'); if (stb) stb.onclick = async () => { stb.disabled = true; try { const r = await api('prof/start', auth()); BD.meta = r.meta; toast('Départ donné !'); fillLive() } catch (x) { toast(x.message); stb.disabled = false } };
   const st = $('#settings');
   if (!st.contains(document.activeElement)) {
     st.innerHTML = `<h2>Réglages</h2>

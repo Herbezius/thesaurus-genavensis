@@ -35,7 +35,9 @@ async function sync() {
       idx: S.i, found: S.found, sesterces: S.sesterces, status: S.screen === 'end' ? 'end' : S.screen,
       qStart: S.screen === 'q' && st ? st.t0 : null, done: S.screen === 'end', protections: S.prot, log: S.log.slice(-40),
       qid: st ? st.id : 0, pending: Object.keys(S.pending || {}) } });
+    const wasStarted = !!(B.meta && B.meta.started !== false), known = !!B.meta;
     B = { ...res, ok: true };
+    if (wasStarted !== res.meta.started && S.screen === 'ready') { if (known && res.meta.started) { buzz([200, 100, 200]); toast('C\'est parti ! La chasse est ouverte.') } render() }
     for (const c of res.inbox) { if (S.applied.includes(c.id)) continue; S.applied.push(c.id); if (!S.since || c.id > S.since) S.since = c.id; incoming(c) }
     for (const a of res.adj) { if (S.adjApplied.includes(a.id)) continue; S.adjApplied.push(a.id); S.sesterces = Math.max(0, S.sesterces + a.amount); addLog('adj', `${a.amount > 0 ? '+' : ''}${a.amount} sesterces : ${a.reason}`); toast(`${a.amount > 0 ? '+' : ''}${a.amount} sesterces — ${a.reason}`) }
     save();
@@ -73,6 +75,7 @@ function addLog(kind, text) { S.log.push({ t: Date.now(), kind, text }); if (S.l
 
 async function join(code, name, players) {
   const res = await api('game/join', { code, name, players });
+  B = { groups: [], meta: res.meta, ok: true };
   for (let i = 0; i < N; i++) { ls(KEY + '-ph-' + i, null); delete PH[i] }
   const start = Math.floor(Math.random() * ZONES.length), order = ZONES.slice(start).concat(ZONES.slice(0, start));
   const pick = shuffle(QUIZ).slice(0, N).sort((a, b) => order.indexOf(a.zone) - order.indexOf(b.zone));
@@ -82,6 +85,7 @@ async function join(code, name, players) {
   save(); render(); sync();
 }
 function begin() {
+  if (!B.meta || B.meta.started === false) return;
   const st = cur(); st.t0 = Date.now();
   st.fx = { dedaleUntil: S.pending.dedale ? Date.now() + 60000 : 0, noSalle: !!S.pending.brouillard, noJoker: !!S.pending.tantale, apollon: !!S.pending.apollon };
   S.pending = {}; S.screen = 'q'; save(); render(); sync();
@@ -101,7 +105,7 @@ function submitFree() {
 function pickOpt(o) { const st = cur(), q = quiz(st.id); if (Date.now() < st.lockUntil) return; if (elapsed() >= DUR) return fail(); if (o === q.bonne) return win('joker'); st.qwrong.push(o); miss() }
 function next() { S.i++; S.screen = S.i >= N ? 'end' : 'ready'; save(); render(); sync() }
 function buzz(p) { try { navigator.vibrate && navigator.vibrate(p) } catch (e) {} }
-function role(i) { const p = S.players.filter(Boolean), r = ['lit l\'énigme', 'tient le téléphone et prend la photo', 'guette les cartels']; return p.map((n, k) => `<b>${esc(n)}</b> ${r[(k + i) % p.length] || ''}`).join(' · ') }
+function role(i) { const p = S.players.filter(Boolean), r = ['lit l\'énigme', 'tient le téléphone et prend la photo', 'guette les cartels', 'surveille le chrono et le Temple']; return p.map((n, k) => `<b>${esc(n)}</b> ${r[(k + i) % p.length] || ''}`).join(' · ') }
 let toastT;
 function toast(msg, curse) { const t = $('#toast'); t.textContent = msg; t.className = 'toast' + (curse ? ' c' : ''); t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 4500) }
 
@@ -318,6 +322,7 @@ function joinHtml() {
  <label for="p1">Joueur 1<input type="text" id="p1" maxlength="20" autocomplete="off"></label>
  <label for="p2">Joueur 2<input type="text" id="p2" maxlength="20" autocomplete="off"></label>
  <label for="p3">Joueur 3 (facultatif)<input type="text" id="p3" maxlength="20" autocomplete="off"></label>
+ <label for="p4">Joueur 4 (facultatif)<input type="text" id="p4" maxlength="20" autocomplete="off"></label>
  <button class="btn" id="go" disabled>Entrer dans la partie</button>
  <p class="err" id="jerr" hidden></p>
 </section>
@@ -335,13 +340,15 @@ function joinHtml() {
  </ul>
 </section>`;
 }
-function readyHtml() { return `${topBar()}
+function readyHtml() {
+  const started = !!(B.meta && B.meta.started !== false), first = S.i === 0;
+  return `${topBar()}
 <section class="card">
  <div class="eyebrow">${esc(S.name)}</div>
- <h2>Prêts pour l'énigme ${S.i + 1} ?</h2>
- <p>Le chronomètre de 5 minutes démarre dès que vous appuyez. Passez au Temple avant, si vous voulez.</p>
+ <h2>${first ? 'Prêts pour l\'aventure ?' : `Prêts pour l'énigme ${S.i + 1} ?`}</h2>
+ ${started ? `<p>Le chronomètre de 5 minutes démarre dès que vous appuyez.${first ? '' : ' Passez au Temple avant, si vous voulez.'}</p>` : `<p><b>En attente du départ.</b> Votre enseignant·e va lancer la partie : le bouton s'activera tout seul.</p>`}
  <p class="who">${role(S.i)}</p>
- <button class="btn" id="begin">Révéler l'énigme</button>
+ <button class="btn" id="begin" ${started ? '' : 'disabled'}>${first ? 'Démarrer l\'aventure' : 'Révéler l\'énigme'}</button>
 </section>` }
 function enigmeText(st, q) {
   if (st.fx.dedaleUntil > Date.now()) return `<p class="enigme maze">« ${esc(shuffle(q.enigme.split(' ')).join(' '))} »</p><p class="small" style="color:var(--curse)">Labyrinthe de Dédale : les mots sont mélangés encore <span id="dedcd"></span> s.</p>`;
@@ -456,9 +463,9 @@ function bind() {
   const go = $('#go');
   if (go) {
     const upd = () => { go.disabled = !($('#code').value.trim() && $('#g').value.trim() && $('#p1').value.trim() && $('#p2').value.trim()) };
-    ['code', 'g', 'p1', 'p2', 'p3'].forEach(i => $('#' + i).addEventListener('input', upd)); upd();
+    ['code', 'g', 'p1', 'p2', 'p3', 'p4'].forEach(i => $('#' + i).addEventListener('input', upd)); upd();
     go.onclick = async () => { go.disabled = true; go.textContent = 'Connexion…'; const e = $('#jerr');
-      try { await join($('#code').value.trim().toUpperCase(), $('#g').value.trim(), [$('#p1').value.trim(), $('#p2').value.trim(), $('#p3').value.trim()].filter(Boolean)) }
+      try { await join($('#code').value.trim().toUpperCase(), $('#g').value.trim(), [$('#p1').value.trim(), $('#p2').value.trim(), $('#p3').value.trim(), $('#p4').value.trim()].filter(Boolean)) }
       catch (err) { e.hidden = false; e.textContent = err.message; go.disabled = false; go.textContent = 'Entrer dans la partie' } };
   }
   const on = (id, f) => { const el = $('#' + id); if (el) el.onclick = f };

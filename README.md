@@ -1,6 +1,6 @@
 # Thesaurus Genavensis
 
-Chasse au trésor et guerre des malédictions au Musée d'art et d'histoire de Genève, pour des groupes de 2 à 3 élèves (4 à 8 groupes par partie).
+Chasse au trésor et guerre des malédictions au Musée d'art et d'histoire de Genève, pour des groupes de 2 à 4 élèves (4 à 8 groupes par partie).
 
 - `/` : le jeu des élèves (code de partie, 8 énigmes, Temple des malédictions)
 - `/prof.html` : l'espace enseignant. L'Olympe (vue de Zeus) suit chaque groupe en direct et permet d'envoyer une malédiction, un bienfait ou des sesterces, avec un motif (« On ne court pas au musée »…). S'y trouvent aussi les réglages, le repérage et les solutions.
