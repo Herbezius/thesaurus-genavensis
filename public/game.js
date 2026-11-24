@@ -1,0 +1,437 @@
+/* Thesaurus Genavensis — jeu élève (chasse au trésor + malédictions entre groupes) */
+(() => {
+const { QUIZ, SPHINX, CURSES, PROTECTIONS } = window.TG;
+const ZONES = ['cour', '113', '114', '115', '0203', '408'];
+const N = 8, DUR = 300, H1 = 90, H2 = 180, H3 = 270, LOCK = 15, SYNC_MS = 3000;
+const KEY = 'thesaurus-netlify-v1';
+const STOP = new Set(['le','la','les','l','un','une','des','de','du','d','au','aux','sa','son','ses','par','en','avec','et','c','est','il','elle','tient','a','sur','dans']);
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function ls(k, v) { try { if (v === undefined) return JSON.parse(localStorage.getItem(k)); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); return true } catch (e) { return v === undefined ? null : false } }
+const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]] } return a };
+const quiz = id => QUIZ.find(q => q.id === id);
+
+let S = ls(KEY) || { screen: 'join' };
+let B = { groups: [], meta: null, ok: true };
+const PH = {}, VID = {};
+const save = () => ls(KEY, S);
+function loadPhotos() { (S.qs || []).forEach((_, i) => { const p = ls(KEY + '-ph-' + i); if (p) PH[i] = p }) }
+loadPhotos();
+
+/* ---------- réseau ---------- */
+async function api(route, body) {
+  const r = await fetch('/api/' + route, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  let data = {}; try { data = await r.json() } catch (e) {}
+  if (!r.ok) { const err = new Error(data.error || 'Erreur réseau'); err.status = r.status; throw err }
+  return data;
+}
+const ident = () => ({ code: S.code, gid: S.gid, token: S.token });
+let syncing = false;
+async function sync() {
+  if (!S.gid || syncing) return; syncing = true;
+  try {
+    const st = cur();
+    const res = await api('sync', { ...ident(), since: S.since || '', state: {
+      idx: S.i, found: S.found, sesterces: S.sesterces, status: S.screen === 'end' ? 'end' : S.screen,
+      qStart: S.screen === 'q' && st ? st.t0 : null, done: S.screen === 'end', protections: S.prot, log: S.log.slice(-40) } });
+    B = { ...res, ok: true };
+    for (const c of res.inbox) { if (S.applied.includes(c.id)) continue; S.applied.push(c.id); if (!S.since || c.id > S.since) S.since = c.id; incoming(c) }
+    for (const a of res.adj) { if (S.adjApplied.includes(a.id)) continue; S.adjApplied.push(a.id); S.sesterces = Math.max(0, S.sesterces + a.amount); addLog('adj', `${a.amount > 0 ? '+' : ''}${a.amount} sesterces : ${a.reason}`); toast(`${a.amount > 0 ? '+' : ''}${a.amount} sesterces — ${a.reason}`) }
+    save();
+  } catch (e) {
+    B.ok = false;
+    if (e.status === 403 || e.status === 404) { B.gone = e.message }
+  } finally { syncing = false; drawBoard(); if (!$('#temple').hidden) drawTemple(true) }
+}
+setInterval(sync, SYNC_MS);
+
+/* ---------- vidéos ---------- */
+async function probe(url) { if (!url || url in VID) return; VID[url] = null; try { const r = await fetch(url, { method: 'HEAD' }); VID[url] = r.ok && /video/.test(r.headers.get('content-type') || 'video') } catch (e) { VID[url] = false } }
+QUIZ.forEach(q => probe(q.video)); Object.values(CURSES).forEach(c => probe(c.video));
+
+/* ---------- correction des réponses libres ---------- */
+function toks(s) { return String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[’'`-]/g, ' ').replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(t => t && !STOP.has(t)).map(t => t.length > 3 && /[sx]$/.test(t) && !/^[ivxlc]+$/.test(t) ? t.slice(0, -1) : t) }
+function lev(a, b) { const m = a.length, n = b.length, d = Array.from({ length: m + 1 }, (_, i) => [i]); for (let j = 1; j <= n; j++) d[0][j] = j; for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); return d[m][n] }
+function near(a, b) { if (a === b) return true; if (/^\d+$/.test(a) || /^\d+$/.test(b) || /^[ivxlc]+$/.test(b)) return false; const L = Math.max(a.length, b.length); return L >= 7 ? lev(a, b) <= 2 : L >= 4 ? lev(a, b) <= 1 : false }
+function check(input, q) {
+  const t = toks(input); if (!t.length) return false;
+  const accT = q.acc.map(toks), accWords = new Set(accT.flat());
+  const bad = new Set(q.fausses.flatMap(toks).filter(w => !accWords.has(w)));
+  if (t.some(w => [...bad].some(b => near(w, b)))) return false;
+  if (t.length > 3) return false;
+  if (accT.some(a => a.join(' ') === t.join(' '))) return true;
+  return accT.filter(a => a.length === 1).some(a => t.some(w => near(w, a[0])));
+}
+
+/* ---------- partie ---------- */
+const cur = () => S.qs && S.qs[S.i];
+const elapsed = () => Math.min(DUR, (Date.now() - cur().t0) / 1000);
+const cap = el => el < H1 ? 10 : el < H2 ? 8 : el < H3 ? 6 : 2;
+const nErr = st => st.wrong.length + st.qwrong.length;
+function addLog(kind, text) { S.log.push({ t: Date.now(), kind, text }); if (S.log.length > 60) S.log.shift() }
+
+async function join(code, name, players) {
+  const res = await api('game/join', { code, name, players });
+  for (let i = 0; i < N; i++) { ls(KEY + '-ph-' + i, null); delete PH[i] }
+  const start = Math.floor(Math.random() * ZONES.length), order = ZONES.slice(start).concat(ZONES.slice(0, start));
+  const pick = shuffle(QUIZ).slice(0, N).sort((a, b) => order.indexOf(a.zone) - order.indexOf(b.zone));
+  S = { screen: 'ready', code: res.code, gid: res.gid, token: res.token, name, players, i: 0, sesterces: 10, found: 0,
+    prot: { egide: 0, miroir: 0 }, pending: {}, since: '', applied: [], adjApplied: [], log: [], queue: [],
+    qs: pick.map(q => ({ id: q.id, opts: shuffle([q.bonne, ...q.fausses]), wrong: [], qwrong: [], pts: null, t0: null, lockUntil: 0, elapsed: null, nophoto: false, via: null, fx: {} })) };
+  save(); render(); sync();
+}
+function begin() {
+  const st = cur(); st.t0 = Date.now();
+  st.fx = { dedaleUntil: S.pending.dedale ? Date.now() + 60000 : 0, noSalle: !!S.pending.brouillard, noJoker: !!S.pending.tantale };
+  S.pending = {}; S.screen = 'q'; save(); render(); sync();
+}
+function win(via) {
+  const st = cur(), el = elapsed(); st.pts = Math.max(1, cap(el) - 2 * nErr(st)); st.elapsed = Math.round(el); st.via = via;
+  S.sesterces += st.pts; S.found++; S.screen = 'res'; buzz([60, 40, 60]); save(); render(); sync();
+}
+function fail() { const st = cur(); if (st.pts !== null) return; st.pts = 0; st.elapsed = DUR; S.screen = 'res'; buzz([300, 100, 300]); save(); render(); sync() }
+function miss() { cur().lockUntil = Date.now() + LOCK * 1000; buzz([200]); save(); updateQ(true) }
+function submitFree() {
+  const st = cur(), q = quiz(st.id), inp = $('#ans'); if (!inp || Date.now() < st.lockUntil) return;
+  const v = inp.value.trim(); if (!v) return; if (elapsed() >= DUR) return fail();
+  if (check(v, q)) return win('libre');
+  st.wrong.push(v.slice(0, 40)); inp.value = ''; miss();
+}
+function pickOpt(o) { const st = cur(), q = quiz(st.id); if (Date.now() < st.lockUntil) return; if (elapsed() >= DUR) return fail(); if (o === q.bonne) return win('joker'); st.qwrong.push(o); miss() }
+function next() { S.i++; S.screen = S.i >= N ? 'end' : 'ready'; save(); render(); sync() }
+function buzz(p) { try { navigator.vibrate && navigator.vibrate(p) } catch (e) {} }
+function role(i) { const p = S.players.filter(Boolean), r = ['lit l\'énigme', 'tient le téléphone et prend la photo', 'guette les cartels']; return p.map((n, k) => `<b>${esc(n)}</b> ${r[(k + i) % p.length] || ''}`).join(' · ') }
+let toastT;
+function toast(msg, curse) { const t = $('#toast'); t.textContent = msg; t.className = 'toast' + (curse ? ' c' : ''); t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 4500) }
+
+/* ---------- malédictions reçues ---------- */
+function incoming(c) {
+  if (c.type === 'note') { addLog('note', c.text); toast(c.text, true); return }
+  const nom = CURSES[c.type]?.nom || c.type;
+  const from = c.reflected ? `renvoyée par le Miroir de ${c.fromName}` : `lancée par ${c.fromName}`;
+  if (S.screen === 'end') { addLog('recv', `${nom} (${from}) — sans effet, chasse terminée`); return }
+  if (S.prot.egide) {
+    S.prot.egide = 0; addLog('blocked', `${nom} ${from} : bloquée par l'Égide`);
+    toast(`L'Égide d'Athéna bloque ${nom} de ${c.fromName} !`);
+    api('curse', { ...ident(), type: 'note', target: c.from, text: `${S.name} a bloqué votre ${nom} avec l'Égide d'Athéna.` }).catch(() => {});
+    return;
+  }
+  if (S.prot.miroir && !c.reflected) {
+    S.prot.miroir = 0; addLog('reflect', `${nom} de ${c.fromName} renvoyée par le Miroir`);
+    toast(`Le Miroir de Persée renvoie ${nom} à ${c.fromName} !`);
+    api('curse', { ...ident(), type: c.type, target: c.from, reflect: true }).catch(() => {});
+    return;
+  }
+  addLog('recv', `${nom} (${from})`);
+  applyCurse(c.type, c.fromName);
+}
+function applyCurse(type, fromName) {
+  const st = cur(), inQ = S.screen === 'q' && st && st.t0;
+  const nom = CURSES[type].nom;
+  if (type === 'pandore') {
+    const r = Math.random();
+    let result;
+    if (r < 0.15) { S.sesterces += 8; result = { gift: 'Un trésor ! +8 sesterces.' } }
+    else if (r < 0.3) { if (!S.prot.egide) { S.prot.egide = 1; result = { gift: 'Un cadeau des dieux : vous recevez une Égide d\'Athéna !' } } else { S.sesterces += 8; result = { gift: 'Un trésor ! +8 sesterces.' } } }
+    else result = { curse: shuffle(['meduse', 'sphinx', 'dedale', 'brouillard', 'tantale'])[0] };
+    S.queue.push({ kind: 'pandore', from: fromName, result });
+    if (result.gift) addLog('gift', 'Boîte de Pandore : ' + result.gift);
+    save(); showOverlay(); return;
+  }
+  if (type === 'meduse' || type === 'sphinx') {
+    const item = { kind: type, from: fromName };
+    if (type === 'sphinx') { const sq = SPHINX[Math.floor(Math.random() * SPHINX.length)]; item.q = SPHINX.indexOf(sq); item.opts = shuffle([sq.ok, ...sq.bad]); item.wrong = []; item.lockUntil = 0 }
+    S.queue.push(item); save(); showOverlay(); return;
+  }
+  if (type === 'dedale') { if (inQ) st.fx.dedaleUntil = Date.now() + 60000; else S.pending.dedale = true }
+  if (type === 'brouillard') { if (inQ && elapsed() < H1) st.fx.noSalle = true; else S.pending.brouillard = true }
+  if (type === 'tantale') { if (inQ && elapsed() < H3) st.fx.noJoker = true; else S.pending.tantale = true }
+  toast(`${nom} ! Lancée par ${fromName}. ${CURSES[type].court}${inQ ? '' : ' à la prochaine énigme'}.`, true);
+  buzz([100, 50, 100, 50, 100]); save(); if (S.screen === 'q') updateQ(true); else render();
+}
+
+/* ---------- superpositions (Méduse, Sphinx, Pandore) ---------- */
+function showOverlay() {
+  const ov = $('#ov'), it = (S.queue || [])[0];
+  if (!it) { ov.hidden = true; ov.innerHTML = ''; return }
+  ov.hidden = false;
+  if (it.kind === 'meduse') {
+    if (!it.started) { it.started = Date.now(); save(); buzz([400, 100, 400]) }
+    const v = CURSES.meduse.video, hasV = VID[v];
+    ov.innerHTML = `<div class="overlay"><div class="ov"><h2>Regard de Méduse</h2><p>${esc(it.from)} vous a pétrifiés !</p>
+      ${hasV ? `<video src="${v}" autoplay muted playsinline loop></video>` : `<div class="stone">Pétrifiés</div>`}
+      <div class="cd" id="ovcd">20</div><p class="small">Impossible de passer. Votre chrono continue…</p></div></div>`;
+  } else if (it.kind === 'sphinx') {
+    const sq = SPHINX[it.q], v = CURSES.sphinx.video;
+    ov.innerHTML = `<div class="overlay"><div class="ov"><h2>Énigme du Sphinx</h2><p>${esc(it.from)} a envoyé le Sphinx. Répondez juste pour passer !</p>
+      ${VID[v] ? `<video src="${v}" autoplay muted playsinline loop style="max-height:30vh"></video>` : ''}
+      <p style="font-size:20px">${esc(sq.q)}</p>
+      <div class="opts">${it.opts.map((o, k) => `<button class="opt" data-k="${k}" ${it.wrong.includes(o) ? 'disabled' : ''}>${esc(o)}</button>`).join('')}</div>
+      <p class="lock" id="ovlock" hidden></p></div></div>`;
+    ov.querySelector('.opts').onclick = e => { const b = e.target.closest('.opt'); if (!b || b.disabled || Date.now() < it.lockUntil) return; const o = it.opts[+b.dataset.k];
+      if (o === sq.ok) { addLog('recv', 'Sphinx vaincu'); S.queue.shift(); save(); toast('Bonne réponse : le Sphinx vous laisse passer.'); showOverlay(); return }
+      it.wrong.push(o); it.lockUntil = Date.now() + 10000; buzz([200]); save(); showOverlay() };
+  } else if (it.kind === 'pandore') {
+    if (!it.opened) { it.opened = Date.now(); save() }
+    const v = CURSES.pandore.video, reveal = Date.now() - it.opened > 3500;
+    const r = it.result, txt = r.gift ? r.gift : `Il en sort… ${CURSES[r.curse].nom} !`;
+    ov.innerHTML = `<div class="overlay"><div class="ov"><h2>Boîte de Pandore</h2><p>${esc(it.from)} vous a envoyé une boîte mystérieuse…</p>
+      ${VID[v] ? `<video src="${v}" autoplay muted playsinline style="max-height:40vh"></video>` : ''}
+      ${reveal ? `<p style="font-size:22px">${esc(txt)}</p><button class="btn gold" id="ovok">Continuer</button>` : `<div class="cd">…</div>`}</div></div>`;
+    if (reveal) $('#ovok').onclick = () => { S.queue.shift(); save(); if (r.curse) applyCurse(r.curse, it.from + ' (Pandore)'); else { render(); showOverlay() } };
+  }
+}
+function tickOverlay() {
+  const it = S.queue && S.queue[0]; if (!it) return;
+  if ($('#ov').hidden) showOverlay();
+  if (it.kind === 'meduse') { const left = Math.ceil(20 - (Date.now() - it.started) / 1000); const cd = $('#ovcd'); if (cd) cd.textContent = Math.max(0, left); if (left <= 0) { S.queue.shift(); save(); showOverlay() } }
+  if (it.kind === 'sphinx') { const l = $('#ovlock'), rem = Math.ceil((it.lockUntil - Date.now()) / 1000); if (l) { l.hidden = rem <= 0; l.textContent = `Faux ! Le Sphinx vous bloque encore ${rem} s.` } }
+  if (it.kind === 'pandore' && !$('#ovok') && Date.now() - it.opened > 3500) showOverlay();
+}
+
+/* ---------- Temple ---------- */
+let T = { sel: null, target: null, msg: '' };
+function openTemple() { T = { sel: null, target: null, msg: '' }; $('#temple').hidden = false; drawTemple() }
+function closeTemple() { $('#temple').hidden = true; $('#temple').innerHTML = '' }
+function drawTemple(soft) {
+  const el = $('#temple'); if (el.hidden) return;
+  if (soft && el.querySelector(':focus')) return;
+  const meta = B.meta || { cursesOn: true, disabled: [] };
+  const others = (B.groups || []).filter(g => g.gid !== S.gid);
+  const allowed = k => meta.cursesOn && !meta.disabled.includes(k);
+  el.innerHTML = `<div class="overlay" style="background:rgba(10,14,13,.88);color:inherit"><div class="ov" style="text-align:left">
+   <section class="card">
+    <div class="top"><h2>Le Temple</h2><span class="pill">${S.sesterces} sesterces</span></div>
+    ${meta.cursesOn ? '' : '<p class="err">Les malédictions sont suspendues par votre enseignant·e.</p>'}
+    <div class="eyebrow">Malédictions</div>
+    <div class="shop">${Object.entries(CURSES).filter(([k]) => !meta.disabled.includes(k)).map(([k, c]) => `
+      <button class="item" data-c="${k}" aria-pressed="${T.sel === k}" ${!allowed(k) || c.prix > S.sesterces ? 'disabled' : ''}>
+       <span class="n">${esc(c.nom)}</span><span class="p">${c.prix} S</span><span class="d">${esc(c.desc)}</span></button>`).join('')}</div>
+    ${T.sel ? `<div class="eyebrow">Cible</div>
+     <div class="targets">${others.length ? others.map(g => `<button data-t="${g.gid}" aria-pressed="${T.target === g.gid}" ${g.done ? 'disabled' : ''}>${esc(g.name)}${g.done ? ' (fini)' : ''}</button>`).join('') : '<p class="muted small">Aucun autre groupe pour l\'instant.</p>'}</div>
+     <button class="btn curse" id="cast" ${T.target ? '' : 'disabled'}>Lancer ${esc(CURSES[T.sel].nom)}</button>` : ''}
+    ${T.msg ? `<p class="err">${esc(T.msg)}</p>` : ''}
+    <div class="eyebrow">Protections</div>
+    <div class="shop">${Object.entries(PROTECTIONS).filter(([k]) => k !== 'miroir' || !meta.disabled.includes('miroir')).map(([k, p]) => `
+      <button class="item" data-p="${k}" ${S.prot[k] || p.prix > S.sesterces ? 'disabled' : ''}>
+       <span class="n">${esc(p.nom)}${S.prot[k] ? ' · active' : ''}</span><span class="p">${p.prix} S</span><span class="d">${esc(p.desc)}</span></button>`).join('')}</div>
+    <button class="btn ghost" id="tclose">Retour à la chasse</button>
+   </section></div></div>`;
+  el.querySelectorAll('[data-c]').forEach(b => b.onclick = () => { T.sel = b.dataset.c; T.msg = ''; drawTemple() });
+  el.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { T.target = b.dataset.t; T.msg = ''; drawTemple() });
+  el.querySelectorAll('[data-p]').forEach(b => b.onclick = () => { const p = PROTECTIONS[b.dataset.p]; if (S.prot[b.dataset.p] || S.sesterces < p.prix) return; S.sesterces -= p.prix; S.prot[b.dataset.p] = 1; addLog('buy', `Achat : ${p.nom}`); save(); toast(`${p.nom} active.`); drawTemple(); drawBoard(); sync() });
+  const cast = $('#cast'); if (cast) cast.onclick = async () => {
+    const c = CURSES[T.sel]; if (S.sesterces < c.prix) return; cast.disabled = true; cast.textContent = 'Envoi…';
+    try {
+      await api('curse', { ...ident(), type: T.sel, target: T.target });
+      const tn = (B.groups.find(g => g.gid === T.target) || {}).name || '?';
+      S.sesterces -= c.prix; addLog('sent', `${c.nom} lancée sur ${tn}`); save();
+      closeTemple(); toast(`${c.nom} lancée sur ${tn} !`, true); render(); sync();
+    } catch (e) { T.msg = e.message; drawTemple() }
+  };
+  $('#tclose').onclick = closeTemple;
+}
+
+/* ---------- photo ---------- */
+function takePhoto() { const c = $('#cam'); c.value = ''; c.click() }
+$('#cam').addEventListener('change', e => {
+  const f = e.target.files && e.target.files[0]; if (!f || S.screen !== 'q') return;
+  const url = URL.createObjectURL(f), img = new Image();
+  img.onload = () => { const M = 640, r = Math.min(1, M / Math.max(img.width, img.height)), cv = document.createElement('canvas'); cv.width = Math.round(img.width * r); cv.height = Math.round(img.height * r); cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height); const d = cv.toDataURL('image/jpeg', .6); URL.revokeObjectURL(url); PH[S.i] = d; cur().nophoto = false; ls(KEY + '-ph-' + S.i, d); save(); render() };
+  img.onerror = () => { URL.revokeObjectURL(url); toast('Photo illisible, recommencez.') };
+  img.src = url;
+});
+function noPhoto(b) { if (!b.dataset.c) { b.dataset.c = '1'; b.textContent = 'Confirmer : continuer sans photo (signalé à l\'enseignant·e)'; return } cur().nophoto = true; save(); render() }
+const hasProof = () => !!PH[S.i] || cur().nophoto;
+
+/* ---------- bandeau ---------- */
+function boardHtml() {
+  const gs = (B.groups || []).slice().sort((a, b) => b.found - a.found || b.idx - a.idx);
+  return `<div class="board" id="board">${gs.map(g => `<div class="chip ${g.gid === S.gid ? 'me' : ''} ${g.online || g.gid === S.gid ? '' : 'off'}">
+    <b>${esc(g.name)}${g.gid === S.gid ? ' (vous)' : ''}</b>
+    <span class="st">${g.done ? 'Terminé' : `Énigme ${Math.min(g.idx + 1, g.total)}/${g.total}`} · ${g.found} trésor${g.found > 1 ? 's' : ''}</span>
+    <span class="st">${g.sesterces} S${g.online || g.gid === S.gid ? '' : ' · hors ligne'}</span>
+    ${g.protections && (g.protections.egide || g.protections.miroir) ? `<span class="sh">${[g.protections.egide ? 'Égide' : '', g.protections.miroir ? 'Miroir' : ''].filter(Boolean).join(' · ')}</span>` : ''}
+  </div>`).join('')}</div>${B.ok ? '' : '<p class="net">Réseau perdu : le jeu continue, synchronisation dès le retour du réseau.</p>'}`;
+}
+function drawBoard() { const el = $('#boardwrap'); if (el) el.innerHTML = boardHtml(); const tb = $('#tbtn'); if (tb) tb.textContent = `Temple · ${S.sesterces} S` }
+const topBar = () => `<div class="top"><span class="pill v">Énigme ${Math.min(S.i + 1, N)} / ${N}</span><span class="pill">${S.found} trésor${S.found > 1 ? 's' : ''}</span><button class="btn curse sm" id="tbtn">Temple · ${S.sesterces} S</button></div><div id="boardwrap">${boardHtml()}</div>
+${S.prot.egide || S.prot.miroir ? `<div class="prot">${S.prot.egide ? '<span class="badge">Égide d\'Athéna active</span>' : ''}${S.prot.miroir ? '<span class="badge">Miroir de Persée actif</span>' : ''}</div>` : ''}
+${Object.keys(S.pending || {}).length ? `<p class="small" style="color:var(--curse)">Malédiction en attente pour la prochaine énigme : ${Object.keys(S.pending).map(k => CURSES[k].nom).join(', ')}</p>` : ''}`;
+
+/* ---------- écrans ---------- */
+function render() {
+  const a = $('#app'); lastLv = null; lastDed = null;
+  if (B.gone && S.gid) { a.innerHTML = `<section class="card"><h2>Partie fermée</h2><p>${esc(B.gone)}</p><button class="btn ghost" id="leave">Revenir à l'accueil</button></section>`; $('#leave').onclick = () => { S = { screen: 'join' }; B = { groups: [], ok: true }; save(); render() }; return }
+  a.innerHTML = S.screen === 'join' ? joinHtml() : S.screen === 'ready' ? readyHtml() : S.screen === 'q' ? qHtml() : S.screen === 'res' ? resHtml() : endHtml();
+  bind(); if (S.screen === 'q') updateQ(true);
+  window.scrollTo({ top: 0 });
+}
+function joinHtml() {
+  const pre = new URLSearchParams(location.search).get('code') || '';
+  return `<header style="display:grid;gap:6px;padding:4px 0">
+ <div class="eyebrow">Musée d'art et d'histoire · Genève</div>
+ <h1>Thesaurus Genavensis</h1>
+ <p class="muted">Chasse au trésor et guerre des malédictions. Huit objets à retrouver, des sesterces à dépenser au Temple pour ralentir les autres groupes.</p>
+</header>
+<section class="card">
+ <h2>Rejoindre la partie</h2>
+ <label for="code">Code de la partie<input type="text" id="code" maxlength="8" value="${esc(pre)}" autocomplete="off" autocapitalize="characters" style="font-family:var(--mono);text-transform:uppercase;letter-spacing:.15em"></label>
+ <label for="g">Nom du groupe<input type="text" id="g" maxlength="30" placeholder="Ex. : Legio XIII Gemina" autocomplete="off"></label>
+ <label for="p1">Joueur 1<input type="text" id="p1" maxlength="20" autocomplete="off"></label>
+ <label for="p2">Joueur 2<input type="text" id="p2" maxlength="20" autocomplete="off"></label>
+ <label for="p3">Joueur 3 (facultatif)<input type="text" id="p3" maxlength="20" autocomplete="off"></label>
+ <button class="btn" id="go" disabled>Entrer dans la partie</button>
+ <p class="err" id="jerr" hidden></p>
+</section>
+<section class="card">
+ <h2>Règles</h2>
+ <ul class="rules">
+  <li><b>But :</b> retrouver le plus d'objets sur 8. En cas d'égalité, le groupe qui a le plus de sesterces l'emporte.</li>
+  <li>Chaque énigme (un texte ou une vidéo) désigne une œuvre. Trouvez-la, <b>photographiez-la</b> (sans flash, personne dans le cadre), puis répondez à la question : la réponse se lit ou se compte devant l'œuvre.</li>
+  <li><b>5 minutes</b> par énigme. Indices à 1 min 30 (la salle) et à 3 min (l'objet). Joker à choix multiples à 4 min 30.</li>
+  <li>Chaque objet trouvé rapporte des <b>sesterces</b> : 10 sans indice, puis 8, 6 ou 2. Chaque erreur coûte 2 sesterces et bloque 15 secondes.</li>
+  <li>Au <b>Temple</b>, dépensez vos sesterces en malédictions contre les autres groupes, ou en protections.</li>
+  <li>Un groupe maudit est protégé par les dieux jusqu'à la fin de son énigme suivante. On ne maudit pas deux fois de suite le même groupe, ni un groupe qui commence son énigme depuis moins d'une minute.</li>
+  <li>Au musée : on marche, on parle bas, on ne touche à rien. Courir coûte des sesterces.</li>
+ </ul>
+</section>`;
+}
+function readyHtml() { return `${topBar()}
+<section class="card">
+ <div class="eyebrow">${esc(S.name)}</div>
+ <h2>Prêts pour l'énigme ${S.i + 1} ?</h2>
+ <p>Le chronomètre de 5 minutes démarre dès que vous appuyez. Passez au Temple avant, si vous voulez.</p>
+ <p class="who">${role(S.i)}</p>
+ <button class="btn" id="begin">Révéler l'énigme</button>
+</section>` }
+function enigmeText(st, q) {
+  if (st.fx.dedaleUntil > Date.now()) return `<p class="enigme maze">« ${esc(shuffle(q.enigme.split(' ')).join(' '))} »</p><p class="small" style="color:var(--curse)">Labyrinthe de Dédale : les mots sont mélangés encore <span id="dedcd"></span> s.</p>`;
+  return `<p class="enigme">« ${esc(q.enigme)} »</p>`;
+}
+function qHtml() {
+  const st = cur(), q = quiz(st.id), ph = PH[S.i], hasVid = q.video && VID[q.video];
+  return `${topBar()}
+<section class="card">
+ <div class="timer">
+  <div class="ring" aria-hidden="true"><svg viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="42"/><circle class="prog" id="prog" cx="50" cy="50" r="42" stroke-dasharray="263.9" stroke-dashoffset="0"/>${[H1, H2, H3].map(t => { const a = t / DUR * 2 * Math.PI; return `<line class="tick" x1="${50 + 36 * Math.cos(a)}" y1="${50 + 36 * Math.sin(a)}" x2="${50 + 48 * Math.cos(a)}" y2="${50 + 48 * Math.sin(a)}"/>` }).join('')}</svg><div class="t" id="clock">5:00</div></div>
+  <div class="steps" id="steps"></div>
+ </div>
+ <div id="enig">${hasVid ? (st.fx.dedaleUntil > Date.now() ? `<p class="hint cursed"><b>Labyrinthe de Dédale</b><br>La vidéo est perdue dans le labyrinthe pendant encore <span id="dedcd"></span> s.</p>` : `<video class="vid" id="qvid" src="${q.video}" autoplay muted playsinline></video><p class="enigme">Quelle œuvre du musée montre la suite de cette vidéo ?</p><button class="link" id="replay">Revoir la vidéo</button>`) : enigmeText(st, q)}</div>
+ <div id="hints" style="display:grid;gap:8px"></div>
+</section>
+${hasProof() ? `
+<section class="card">
+ ${ph ? `<div class="thumbrow"><img src="${ph}" alt="Photo de l'objet"><button class="link" id="retake">Reprendre la photo</button></div>` : `<p class="tries">Sans photo : ce sera signalé à votre enseignant·e.</p>`}
+ <h2><span class="stepno">2</span>${esc(q.question)}</h2>
+ <div class="answer"><input type="text" id="ans" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Votre réponse" placeholder="Votre réponse"><button class="btn" id="send">Valider</button></div>
+ <p class="fmt">Réponse attendue : ${esc(q.format)}.</p>
+ <p class="tries" id="tries"></p>
+ <p class="lock" id="lock" hidden></p>
+ <div class="joker" id="joker" hidden>
+  <p><b style="color:var(--gold)">Joker</b> · choisissez parmi ces réponses (2 sesterces)</p>
+  <div class="opts" id="opts">${st.opts.map((o, k) => `<button class="opt" data-k="${k}">${esc(o)}</button>`).join('')}</div>
+ </div>
+</section>` : `
+<section class="card">
+ <h2><span class="stepno">1</span>Trouvez l'œuvre et photographiez-la</h2>
+ <p class="muted small">Sans flash, l'œuvre bien visible, personne sur la photo. La question s'affichera ensuite.</p>
+ <button class="btn gold" id="shoot">Prendre la photo</button>
+ <button class="link" id="nophoto">Photo impossible ?</button>
+</section>`}`;
+}
+let lastLv = null, lastDed = null;
+function updateQ(force) {
+  if (S.screen !== 'q') return;
+  const st = cur(), q = quiz(st.id), el = elapsed();
+  if (el >= DUR) { fail(); return }
+  const left = Math.ceil(DUR - el), clock = $('#clock'); if (!clock) return;
+  clock.textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+  const p = $('#prog'); p.setAttribute('stroke-dashoffset', String(263.9 * el / DUR)); p.classList.toggle('late', el >= H3);
+  const lv = el >= H3 ? 3 : el >= H2 ? 2 : el >= H1 ? 1 : 0;
+  const ded = st.fx.dedaleUntil > Date.now();
+  if (ded) { const d = $('#dedcd'); if (d) d.textContent = Math.ceil((st.fx.dedaleUntil - Date.now()) / 1000) }
+  if (lastDed !== null && lastDed !== ded) { lastDed = ded; render(); return }
+  lastDed = ded;
+  if (lastLv !== lv || force) {
+    if (lastLv !== null && lv > lastLv) buzz([80]); lastLv = lv;
+    const hasVid = q.video && VID[q.video];
+    const h = [];
+    if (lv >= 1) h.push(st.fx.noSalle ? `<p class="hint cursed"><b>Brouillard des Enfers</b><br>L'indice de salle a disparu dans la brume.</p>` : `<p class="hint"><b>Indice 1 · Lieu</b><br>${esc(q.salle)}</p>`);
+    if (lv >= 1 && hasVid && !ded) h.push(`<p class="hint"><b>Indice · L'énigme</b><br>« ${esc(q.enigme)} »</p>`);
+    if (lv >= 2) h.push(`<p class="hint"><b>Indice 2 · L'œuvre</b><br>${esc(q.indice)}</p>`);
+    if (lv >= 3 && st.fx.noJoker) h.push(`<p class="hint cursed"><b>Supplice de Tantale</b><br>Le joker est hors d'atteinte : tapez votre réponse.</p>`);
+    $('#hints').innerHTML = h.join('');
+    const j = $('#joker'); if (j) j.hidden = lv < 3 || st.fx.noJoker;
+    document.querySelectorAll('.opt').forEach(b => { b.disabled = st.qwrong.includes(st.opts[+b.dataset.k]) });
+    const tr = $('#tries'); if (tr) tr.textContent = st.wrong.length ? `Refusé : ${st.wrong.map(w => '« ' + w + ' »').join(', ')}` : '';
+  }
+  const pts = Math.max(1, cap(el) - 2 * nErr(st));
+  $('#steps').innerHTML = [['0:00', 'Énigme', 0, ded], ['1:30', 'Lieu', H1, st.fx.noSalle], ['3:00', 'Œuvre', H2, false], ['4:30', 'Joker', H3, st.fx.noJoker]].map(([t, l, v, x]) => `<span class="${el >= v ? 'on' : ''} ${x ? 'x' : ''}"><i></i>${t} · ${l}</span>`).join('') + `<span class="stake">En jeu : ${pts} sesterces</span>`;
+  const lk = $('#lock'), rem = Math.ceil((st.lockUntil - Date.now()) / 1000), locked = rem > 0;
+  if (lk) { lk.hidden = !locked; if (locked) lk.textContent = `Mauvaise réponse ! Attendez ${rem} s avant de réessayer.` }
+  const sd = $('#send'); if (sd) sd.disabled = locked;
+  document.querySelectorAll('.opt').forEach(b => b.style.pointerEvents = locked ? 'none' : '');
+}
+function resHtml() {
+  const st = cur(), q = quiz(st.id), ok = st.pts > 0, ph = PH[S.i];
+  return `${topBar()}
+<section class="verdict ${ok ? 'ok' : 'ko'}">
+ <div class="big">${ok ? `Trésor trouvé · +${st.pts} sesterces` : 'Temps écoulé'}</div>
+ <p>${ok ? `En ${Math.floor(st.elapsed / 60)} min ${String(st.elapsed % 60).padStart(2, '0')} s${st.via === 'joker' ? ', grâce au joker' : ''}${nErr(st) ? `, après ${nErr(st)} erreur${nErr(st) > 1 ? 's' : ''}` : ''}.` : 'L\'œuvre vous a échappé cette fois.'}</p>
+ <p><b>Réponse :</b> ${esc(q.bonne)}</p>
+</section>
+<section class="card">
+ ${ph ? `<img class="photo" src="${ph}" alt="Votre photo de l'œuvre">` : ''}
+ <div class="eyebrow">${esc(q.salle)} · inv. ${esc(q.inv)}</div>
+ <h2>${esc(q.titre)}</h2>
+ <p>${esc(q.expl)}</p>
+ <a href="${esc(q.url)}" target="_blank" rel="noopener" class="link">Fiche du musée ↗</a>
+</section>
+<button class="btn" id="next">${S.i + 1 < N ? 'Énigme suivante' : 'Terminer la chasse'}</button>`;
+}
+function endHtml() {
+  const gs = (B.groups || []).slice().sort((a, b) => b.found - a.found || b.sesterces - a.sesterces);
+  const rank = gs.findIndex(g => g.gid === S.gid) + 1;
+  const sent = S.log.filter(l => l.kind === 'sent').length, recv = S.log.filter(l => ['recv', 'blocked', 'reflect'].includes(l.kind)).length;
+  return `
+<section class="card">
+ <div class="eyebrow">${esc(S.name)}</div>
+ <div class="big-n">${S.found}<span style="font-size:22px"> trésor${S.found > 1 ? 's' : ''} sur ${N}</span></div>
+ <p><b>${S.sesterces}</b> sesterces en poche · ${sent} malédiction${sent > 1 ? 's' : ''} lancée${sent > 1 ? 's' : ''} · ${recv} reçue${recv > 1 ? 's' : ''}</p>
+ ${rank ? `<div class="titre">${rank === 1 ? 'Imperator' : rank === 2 ? 'Legatus' : rank === 3 ? 'Centurio' : 'Miles'}</div><p class="muted">${rank}${rank === 1 ? 'er' : 'e'} sur ${gs.length} groupes pour l'instant.</p>` : ''}
+</section>
+<section class="card"><h2>Classement</h2><div class="scroll"><table><thead><tr><th>#</th><th>Groupe</th><th class="n">Trésors</th><th class="n">S</th></tr></thead><tbody>
+ ${gs.map((g, i) => `<tr${g.gid === S.gid ? ' style="font-weight:700"' : ''}><td>${i + 1}</td><td>${esc(g.name)}${g.done ? '' : ' <span class="muted small">(en cours)</span>'}</td><td class="n">${g.found}</td><td class="n">${g.sesterces}</td></tr>`).join('')}
+ </tbody></table></div></section>
+<section class="card"><h2>Votre butin</h2>
+ <div class="loot">${S.qs.map((st, i) => { const q = quiz(st.id); return `<figure>${PH[i] ? `<img src="${PH[i]}" alt="${esc(q.titre)}">` : `<div class="nophoto">Pas de photo</div>`}<figcaption><span>${esc(q.titre)}</span><b>${st.pts ? '+' + st.pts : '—'}</b></figcaption></figure>` }).join('')}</div>
+</section>
+<section class="card"><h2>Chronique des malédictions</h2>
+ ${S.log.length ? `<div class="feed">${S.log.slice().reverse().map(l => `<div><span class="muted small">${new Date(l.t).toLocaleTimeString('fr-CH', { hour: '2-digit', minute: '2-digit' })}</span> ${esc(l.text)}</div>`).join('')}</div>` : '<p class="muted">Aucune malédiction. Une chasse bien paisible !</p>'}
+</section>
+<button class="btn ghost" id="reset">Quitter cette partie</button>`;
+}
+function bind() {
+  const go = $('#go');
+  if (go) {
+    const upd = () => { go.disabled = !($('#code').value.trim() && $('#g').value.trim() && $('#p1').value.trim() && $('#p2').value.trim()) };
+    ['code', 'g', 'p1', 'p2', 'p3'].forEach(i => $('#' + i).addEventListener('input', upd)); upd();
+    go.onclick = async () => { go.disabled = true; go.textContent = 'Connexion…'; const e = $('#jerr');
+      try { await join($('#code').value.trim().toUpperCase(), $('#g').value.trim(), [$('#p1').value.trim(), $('#p2').value.trim(), $('#p3').value.trim()].filter(Boolean)) }
+      catch (err) { e.hidden = false; e.textContent = err.message; go.disabled = false; go.textContent = 'Entrer dans la partie' } };
+  }
+  const on = (id, f) => { const el = $('#' + id); if (el) el.onclick = f };
+  on('tbtn', openTemple); on('begin', begin); on('shoot', takePhoto); on('retake', takePhoto); on('send', submitFree); on('next', next);
+  on('replay', () => { const v = $('#qvid'); if (v) { v.currentTime = 0; v.play() } });
+  const np = $('#nophoto'); if (np) np.onclick = () => noPhoto(np);
+  const ans = $('#ans'); if (ans) ans.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submitFree() } });
+  const opts = $('#opts'); if (opts) opts.addEventListener('click', e => { const b = e.target.closest('.opt'); if (b && !b.disabled) pickOpt(cur().opts[+b.dataset.k]) });
+  const rs = $('#reset'); if (rs) rs.onclick = () => { if (!rs.dataset.c) { rs.dataset.c = '1'; rs.textContent = 'Confirmer : quitter et effacer cette partie'; return } for (let i = 0; i < N; i++) ls(KEY + '-ph-' + i, null); S = { screen: 'join' }; B = { groups: [], ok: true }; save(); render() };
+  const v = $('#qvid'); if (v) v.addEventListener('ended', () => v.classList.add('mini'));
+}
+
+setInterval(() => { if (S.screen === 'q') updateQ(false); tickOverlay() }, 500);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { sync(); if (S.screen === 'q') updateQ(true) } });
+render(); showOverlay(); sync();
+})();

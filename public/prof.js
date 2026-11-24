@@ -1,0 +1,147 @@
+/* Thesaurus Genavensis — tableau de bord enseignant */
+(() => {
+const { QUIZ, CURSES } = window.TG;
+const ZONES = ['cour', '113', '114', '115', '0203', '408'];
+const ZLAB = { cour: 'Cour lapidaire (107-109)', '113': 'Salle 113', '114': 'Salle 114', '115': 'Salle 115', '0203': 'Salle 0203 (niveau inférieur)', '408': 'Salle 408 (beaux-arts)' };
+const PKEY = 'thesaurus-prof-v1', RKEY = 'thesaurus-reperage-v2';
+const STOP = new Set(['le','la','les','l','un','une','des','de','du','d','au','aux','sa','son','ses','par','en','avec','et','c','est','il','elle','tient','a','sur','dans']);
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function ls(k, v) { try { if (v === undefined) return JSON.parse(localStorage.getItem(k)); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); return true } catch (e) { return v === undefined ? null : false } }
+async function api(route, body) {
+  const r = await fetch('/api/' + route, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  let d = {}; try { d = await r.json() } catch (e) {}
+  if (!r.ok) { const e = new Error(d.error || 'Erreur réseau'); e.status = r.status; throw e } return d;
+}
+let toastT; function toast(m) { const t = $('#toast'); t.textContent = m; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 4000) }
+const hm = t => new Date(t).toLocaleTimeString('fr-CH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+let P = ls(PKEY), BD = null, TAB = 'live', err = '';
+const auth = () => ({ code: P.code, profToken: P.profToken });
+const joinUrl = () => `${location.origin}/?code=${P.code}`;
+
+/* ---- correction (même logique que le jeu) ---- */
+function toks(s) { return String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[’'`-]/g, ' ').replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(t => t && !STOP.has(t)).map(t => t.length > 3 && /[sx]$/.test(t) && !/^[ivxlc]+$/.test(t) ? t.slice(0, -1) : t) }
+function lev(a, b) { const m = a.length, n = b.length, d = Array.from({ length: m + 1 }, (_, i) => [i]); for (let j = 1; j <= n; j++) d[0][j] = j; for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); return d[m][n] }
+function near(a, b) { if (a === b) return true; if (/^\d+$/.test(a) || /^\d+$/.test(b) || /^[ivxlc]+$/.test(b)) return false; const L = Math.max(a.length, b.length); return L >= 7 ? lev(a, b) <= 2 : L >= 4 ? lev(a, b) <= 1 : false }
+function check(input, q) { const t = toks(input); if (!t.length) return false; const accT = q.acc.map(toks), accWords = new Set(accT.flat()); const bad = new Set(q.fausses.flatMap(toks).filter(w => !accWords.has(w))); if (t.some(w => [...bad].some(b => near(w, b)))) return false; if (t.length > 3) return false; if (accT.some(a => a.join(' ') === t.join(' '))) return true; return accT.filter(a => a.length === 1).some(a => t.some(w => near(w, a[0]))) }
+
+/* ---- écrans ---- */
+function render() {
+  const a = $('#app');
+  if (!P) { a.innerHTML = loginHtml(); bindLogin(); return }
+  a.innerHTML = `
+<header class="top"><div><div class="eyebrow">Espace enseignant</div><h1>Thesaurus Genavensis</h1></div>
+ <div class="tabs" role="group" aria-label="Rubriques">${[['live', 'Partie en direct'], ['rep', 'Repérage'], ['sol', 'Solutions']].map(([k, l]) => `<button data-t="${k}" aria-pressed="${TAB === k}">${l}</button>`).join('')}</div></header>
+<div id="tab"></div>`;
+  a.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { TAB = b.dataset.t; render() });
+  if (TAB === 'live') drawLive(); else if (TAB === 'rep') drawRep(); else drawSol();
+}
+function loginHtml() { return `
+<header><div class="eyebrow">Espace enseignant</div><h1>Thesaurus Genavensis</h1></header>
+<section class="card" style="max-width:520px">
+ <h2>Nouvelle partie</h2>
+ <label for="pw">Mot de passe enseignant<input type="password" id="pw" autocomplete="current-password"></label>
+ <button class="btn" id="create">Créer la partie</button>
+ <p class="err" id="lerr" hidden></p>
+ <p class="small muted">Un code de partie est créé. Les groupes le tapent sur leur téléphone (ou scannent le QR code) pour rejoindre la chasse.</p>
+</section>
+<section class="card" style="max-width:520px">
+ <h2>Reprendre une partie</h2>
+ <p class="small muted">Sur un autre appareil : saisissez le code de la partie et la clé enseignant affichée sous le QR code.</p>
+ <label for="rc">Code de la partie<input type="text" id="rc" style="font-family:var(--mono);text-transform:uppercase"></label>
+ <label for="rk">Clé enseignant<input type="text" id="rk" style="font-family:var(--mono)"></label>
+ <button class="btn ghost" id="resume">Reprendre</button>
+</section>` }
+function bindLogin() {
+  const go = async () => { const e = $('#lerr'); try { const r = await api('game/create', { password: $('#pw').value }); P = { code: r.code, profToken: r.profToken }; ls(PKEY, P); render(); poll() } catch (x) { e.hidden = false; e.textContent = x.message } };
+  $('#create').onclick = go; $('#pw').addEventListener('keydown', e => { if (e.key === 'Enter') go() });
+  $('#resume').onclick = async () => { P = { code: $('#rc').value.trim().toUpperCase(), profToken: $('#rk').value.trim() }; try { BD = await api('prof/board', auth()); ls(PKEY, P); render() } catch (x) { P = null; toast(x.message) } };
+}
+
+function drawLive() {
+  const t = $('#tab');
+  t.innerHTML = `
+<div class="grid2">
+ <section class="card">
+  <div class="eyebrow">Code de la partie</div>
+  <div class="code">${esc(P.code)}</div>
+  <div class="row"><div class="qr" id="qr"></div><div style="display:grid;gap:6px;min-width:0"><p class="small">Les élèves ouvrent :</p><p style="font-family:var(--mono);font-size:14px;overflow-wrap:anywhere">${esc(joinUrl())}</p><button class="btn ghost sm" id="copy">Copier le lien</button></div></div>
+  <p class="small muted">Clé enseignant (pour reprendre sur un autre appareil) : <span style="font-family:var(--mono)">${esc(P.profToken)}</span></p>
+ </section>
+ <section class="card" id="settings"></section>
+</div>
+<section class="card"><div class="top"><h2>Groupes</h2><span class="small muted" id="upd"></span></div><div class="scroll" id="groups"><p class="muted">Chargement…</p></div></section>
+<section class="card"><h2>Malédictions en direct</h2><div class="feed" id="feed"></div></section>
+<section class="card"><h2>Fin de partie</h2>
+ <p class="small muted">Efface toutes les données de la partie (groupes, scores, malédictions). Les téléphones des élèves affichent alors « partie fermée ». Sans action de votre part, tout est effacé automatiquement après 48 heures.</p>
+ <button class="btn ghost" id="end">Terminer et effacer la partie</button></section>`;
+  try { new QRCode($('#qr'), { text: joinUrl(), width: 132, height: 132 }) } catch (e) { $('#qr').hidden = true }
+  $('#copy').onclick = () => { navigator.clipboard.writeText(joinUrl()).then(() => toast('Lien copié.'), () => toast('Copie impossible : recopiez le lien.')) };
+  $('#end').onclick = async e => { const b = e.currentTarget; if (!b.dataset.c) { b.dataset.c = '1'; b.textContent = 'Confirmer : tout effacer maintenant'; return } try { await api('prof/end', auth()) } catch (x) {} ls(PKEY, null); P = null; BD = null; render() };
+  fillLive();
+}
+function fillLive() {
+  if (TAB !== 'live' || !P || !$('#groups')) return;
+  if (!BD) return;
+  $('#upd').textContent = 'Mis à jour à ' + hm(BD.now);
+  const m = BD.meta;
+  const st = $('#settings');
+  if (!st.contains(document.activeElement)) {
+    st.innerHTML = `<h2>Réglages</h2>
+   <label class="switch"><input type="checkbox" id="con" ${m.cursesOn ? 'checked' : ''}> Malédictions actives</label>
+   <p class="small muted">Désactiver certaines malédictions ou le Miroir :</p>
+   <div style="display:grid;gap:6px">${[...Object.entries(CURSES).map(([k, c]) => [k, c.nom]), ['miroir', 'Miroir de Persée (protection)']].map(([k, n]) => `<label class="switch"><input type="checkbox" data-d="${k}" ${m.disabled.includes(k) ? '' : 'checked'}> ${esc(n)}</label>`).join('')}</div>`;
+    $('#con').onchange = e => setSettings({ cursesOn: e.target.checked });
+    st.querySelectorAll('[data-d]').forEach(c => c.onchange = () => setSettings({ disabled: [...st.querySelectorAll('[data-d]')].filter(x => !x.checked).map(x => x.dataset.d) }));
+  }
+  const gs = BD.groups.slice().sort((a, b) => b.found - a.found || b.sesterces - a.sesterces);
+  $('#groups').innerHTML = gs.length ? `<table><thead><tr><th>#</th><th>Groupe</th><th>Avancée</th><th class="n">Trésors</th><th class="n">Sesterces</th><th>Protections</th><th>Ajuster</th></tr></thead><tbody>
+  ${gs.map((g, i) => `<tr><td>${i + 1}</td><td><b>${esc(g.name)}</b><br><span class="small muted">${g.players.map(esc).join(', ')}</span>
+    ${g.log && g.log.length ? `<details><summary class="small">Journal</summary><div class="small">${g.log.slice().reverse().map(l => `<div>${hm(l.t)} · ${esc(l.text)}</div>`).join('')}</div></details>` : ''}</td>
+   <td>${g.done ? '<span class="badge">Terminé</span>' : `Énigme ${Math.min(g.idx + 1, g.total)}/${g.total}`}${g.online || g.done ? '' : '<br><span class="err small">hors ligne</span>'}</td>
+   <td class="n">${g.found}</td><td class="n">${g.sesterces}</td>
+   <td class="small">${[g.protections.egide ? 'Égide' : '', g.protections.miroir ? 'Miroir' : ''].filter(Boolean).join(', ') || '—'}</td>
+   <td><div class="row"><button class="btn ghost sm" data-adj="${g.gid}" data-a="-10">−10</button><button class="btn ghost sm" data-adj="${g.gid}" data-a="5">+5</button></div></td></tr>`).join('')}
+  </tbody></table>` : '<p class="muted">Aucun groupe pour l\'instant. Donnez le code aux élèves.</p>';
+  $('#groups').querySelectorAll('[data-adj]').forEach(b => b.onclick = async () => {
+    const a = +b.dataset.a; try { await api('prof/adjust', { ...auth(), gid: b.dataset.adj, amount: a, reason: a < 0 ? 'Pénalité de l\'enseignant·e' : 'Bonus de l\'enseignant·e' }); toast(`${a > 0 ? '+' : ''}${a} sesterces envoyés.`) } catch (x) { toast(x.message) } });
+  $('#feed').innerHTML = BD.curses.length ? BD.curses.map(c => `<div><span class="muted small">${hm(c.ts)}</span> <b>${esc(c.fromName)}</b> → <b>${esc(c.toName)}</b> : ${c.type === 'note' ? esc(c.text) : esc(CURSES[c.type]?.nom || c.type) + (c.reflected ? ' <span class="small" style="color:var(--curse)">(renvoyée par le Miroir)</span>' : '')}</div>`).join('') : '<p class="muted">Aucune malédiction pour l\'instant.</p>';
+}
+async function setSettings(b) { try { const r = await api('prof/settings', { ...auth(), ...b }); BD.meta = r.meta; toast('Réglages enregistrés.') } catch (x) { toast(x.message) } }
+async function poll() {
+  if (!P || TAB !== 'live') return;
+  try { BD = await api('prof/board', auth()); fillLive() }
+  catch (x) { if (x.status === 404 || x.status === 403) { toast('Partie introuvable : elle a peut-être été effacée.'); ls(PKEY, null); P = null; render() } }
+}
+setInterval(poll, 3000);
+
+/* ---- repérage ---- */
+let REP = ls(RKEY) || {};
+function drawRep() {
+  const v = Object.values(REP), ok = v.filter(x => x.s === 'ok').length, ko = v.filter(x => x.s === 'ko').length, gone = v.filter(x => x.s === 'gone').length;
+  $('#tab').innerHTML = `<section class="card"><h2>Mode repérage</h2>
+   <p class="small muted">Passez devant chaque œuvre, testez une réponse comme un élève, puis marquez la question. Les notes restent sur cet appareil. À la fin, copiez le rapport et collez-le dans la conversation avec Claude.</p>
+   <p class="small"><b>${ok}</b> validées · <b>${ko}</b> à corriger · <b>${gone}</b> introuvables · <b>${QUIZ.length - ok - ko - gone}</b> à voir</p>
+   <button class="btn gold" id="copyrep">Copier le rapport</button><textarea id="reptxt" hidden readonly></textarea></section>
+  ${ZONES.map(z => `<section class="card"><div class="zone">${esc(ZLAB[z])}</div>${QUIZ.filter(q => q.zone === z).map(q => { const r = REP[q.id] || {}; return `
+   <div class="rep" data-id="${q.id}"><div><b>${esc(q.titre)}</b> <span class="muted small">inv. ${esc(q.inv)}${q.video ? ' · énigme vidéo n° ' + q.video.match(/\d+/)[0] : ''}</span></div>
+    <div class="small">${esc(q.question)}</div><div class="acc">Accepté : ${q.acc.map(esc).join(' · ')} — joker : ${esc(q.bonne)}</div>
+    <input type="text" class="tst" placeholder="Tester une réponse" autocomplete="off"><span class="test small"></span>
+    <div class="status">${[['ok', 'Validée'], ['ko', 'À corriger'], ['gone', 'Introuvable']].map(([s, l]) => `<button data-s="${s}" aria-pressed="${r.s === s}">${l}</button>`).join('')}</div>
+    <textarea class="note" placeholder="Note : vraie réponse, détail, emplacement…">${esc(r.n || '')}</textarea></div>` }).join('')}</section>`).join('')}`;
+  document.querySelectorAll('.rep').forEach(box => { const id = box.dataset.id, q = QUIZ.find(x => x.id === +id);
+    box.querySelector('.tst').oninput = e => { const o = box.querySelector('.test'); if (!e.target.value.trim()) { o.textContent = ''; return } const y = check(e.target.value, q); o.textContent = y ? ' acceptée' : ' refusée'; o.className = 'test small ' + (y ? 'y' : 'n') };
+    box.querySelectorAll('.status button').forEach(b => b.onclick = () => { REP[id] = REP[id] || {}; REP[id].s = REP[id].s === b.dataset.s ? null : b.dataset.s; ls(RKEY, REP); box.querySelectorAll('.status button').forEach(x => x.setAttribute('aria-pressed', x.dataset.s === REP[id].s)) });
+    box.querySelector('.note').onchange = e => { REP[id] = REP[id] || {}; REP[id].n = e.target.value.trim(); ls(RKEY, REP) }; });
+  $('#copyrep').onclick = () => { const L = ['Repérage Thesaurus Genavensis — ' + new Date().toLocaleDateString('fr-CH')];
+    ZONES.forEach(z => QUIZ.filter(q => q.zone === z).forEach(q => { const r = REP[q.id]; if (!r || (!r.s && !r.n)) return; L.push(`[${{ ok: 'OK', ko: 'À CORRIGER', gone: 'INTROUVABLE' }[r.s] || 'NOTE'}] #${q.id} ${q.titre} (inv. ${q.inv}, ${q.salle})${r.n ? ' — ' + r.n : ''}`) }));
+    const vus = new Set(Object.keys(REP).filter(k => REP[k].s)), rest = QUIZ.filter(q => !vus.has(String(q.id))); if (rest.length) L.push('Non vérifiées : ' + rest.map(q => '#' + q.id).join(', '));
+    const txt = L.join('\n'), ta = $('#reptxt');
+    navigator.clipboard.writeText(txt).then(() => toast('Rapport copié.'), () => { ta.hidden = false; ta.value = txt; ta.style.minHeight = '160px'; ta.select(); toast('Copiez le texte sélectionné.') }) };
+}
+function drawSol() {
+  $('#tab').innerHTML = ZONES.map(z => `<section class="card"><div class="zone">${esc(ZLAB[z])}</div>${QUIZ.filter(q => q.zone === z).map(q => `<div class="rep"><div><b>${esc(q.titre)}</b> <span class="muted small">inv. ${esc(q.inv)}</span></div><div class="small">${esc(q.question)} → <b>${esc(q.bonne)}</b></div></div>`).join('')}</section>`).join('');
+}
+render(); if (P) poll();
+})();
