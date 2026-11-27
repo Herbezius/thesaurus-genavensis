@@ -94,6 +94,9 @@ PROTECTIONS = {
  "egide": dict(nom="Égide d'Athéna", prix=15, desc="Annule la prochaine malédiction reçue."),
  "miroir": dict(nom="Miroir de Persée", prix=25, desc="Renvoie automatiquement la prochaine malédiction à son expéditeur."),
 }
+OBJETS = {
+ "ariane": dict(nom="Fil d'Ariane", prix=10, max=2, desc="Perdus dans une énigme trop difficile ? Comme Thésée sorti du labyrinthe grâce au fil d'Ariane, vous en sortez : une autre énigme la remplace, si possible dans la même salle, et le chrono repart à zéro. Deux fois au plus par partie."),
+}
 BOONS = {
  "don5": dict(nom="Offrande d'Hermès", prix=5, desc="Offrez 5 de vos sesterces au groupe choisi."),
  "don10": dict(nom="Grande offrande d'Hermès", prix=10, desc="Offrez 10 de vos sesterces au groupe choisi."),
@@ -200,6 +203,6 @@ FINALE = dict(qid=29, titre="Homère chantant son Odyssée", artiste="Jean-Pierr
   ],
   minChars=60, ptsQcm=3, ptsTexte=5)
 
-out = "/* Données du jeu (générées par tools/build_data.py) */\nwindow.TG=" + json.dumps(dict(QUIZ=QUIZ, SPHINX=SPHINX, CURSES=CURSES, PROTECTIONS=PROTECTIONS, BOONS=BOONS, SCENES=SCENES, FINALE=FINALE), ensure_ascii=False) + ";\n"
+out = "/* Données du jeu (générées par tools/build_data.py) */\nwindow.TG=" + json.dumps(dict(QUIZ=QUIZ, SPHINX=SPHINX, CURSES=CURSES, PROTECTIONS=PROTECTIONS, BOONS=BOONS, SCENES=SCENES, FINALE=FINALE, OBJETS=OBJETS), ensure_ascii=False) + ";\n"
 pathlib.Path(sys.argv[2]).write_text(out)
 print("ok", len(QUIZ), len(SPHINX))

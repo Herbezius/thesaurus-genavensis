@@ -209,7 +209,7 @@ const routes = {
     const { meta, code } = ctx;
     if (typeof b.cursesOn === "boolean") meta.cursesOn = b.cursesOn;
     if (typeof b.boonsOn === "boolean") meta.boonsOn = b.boonsOn;
-    if (Array.isArray(b.disabled)) meta.disabled = b.disabled.filter(t => CURSES.includes(t) || t === "miroir");
+    if (Array.isArray(b.disabled)) meta.disabled = b.disabled.filter(t => CURSES.includes(t) || t === "miroir" || t === "ariane");
     await s.setJSON(K(code).meta, meta);
     return json({ ok: true, meta: publicMeta(meta) });
   },

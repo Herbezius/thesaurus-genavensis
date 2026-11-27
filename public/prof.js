@@ -103,8 +103,8 @@ function fillLive() {
     st.innerHTML = `<h2>Réglages</h2>
    <label class="switch"><input type="checkbox" id="con" ${m.cursesOn ? 'checked' : ''}> Malédictions entre groupes</label>
    <label class="switch"><input type="checkbox" id="bon" ${m.boonsOn ? 'checked' : ''}> Bienfaits entre groupes</label>
-   <p class="small muted">Désactiver certaines malédictions ou le Miroir :</p>
-   <div style="display:grid;gap:6px">${[...Object.entries(CURSES).map(([k, c]) => [k, c.nom]), ['miroir', 'Miroir de Persée (protection)']].map(([k, n]) => `<label class="switch"><input type="checkbox" data-d="${k}" ${m.disabled.includes(k) ? '' : 'checked'}> ${esc(n)}</label>`).join('')}</div>`;
+   <p class="small muted">Désactiver certaines malédictions, le Miroir ou le Fil d'Ariane :</p>
+   <div style="display:grid;gap:6px">${[...Object.entries(CURSES).map(([k, c]) => [k, c.nom]), ['miroir', 'Miroir de Persée (protection)'], ['ariane', 'Fil d\'Ariane (changer d\'énigme)']].map(([k, n]) => `<label class="switch"><input type="checkbox" data-d="${k}" ${m.disabled.includes(k) ? '' : 'checked'}> ${esc(n)}</label>`).join('')}</div>`;
     $('#con').onchange = e => setSettings({ cursesOn: e.target.checked });
     $('#bon').onchange = e => setSettings({ boonsOn: e.target.checked });
     st.querySelectorAll('[data-d]').forEach(c => c.onchange = () => setSettings({ disabled: [...st.querySelectorAll('[data-d]')].filter(x => !x.checked).map(x => x.dataset.d) }));

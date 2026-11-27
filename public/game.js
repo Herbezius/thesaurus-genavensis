@@ -1,6 +1,6 @@
 /* Thesaurus Genavensis — jeu élève (chasse au trésor + malédictions entre groupes) */
 (() => {
-const { QUIZ, SPHINX, CURSES, PROTECTIONS, BOONS, SCENES, FINALE } = window.TG;
+const { QUIZ, SPHINX, CURSES, PROTECTIONS, BOONS, SCENES, FINALE, OBJETS } = window.TG;
 const scene = id => SCENES.find(x => x.id === id);
 const ZONES = ['cour', '113', '114', '115', '0203', '408'];
 const N = 8, DUR = 300, H1 = 90, H2 = 180, H3 = 270, LOCK = 15, SYNC_MS = 3000;
@@ -332,8 +332,39 @@ function bindFinal() {
 
 /* ---------- Temple ---------- */
 let T = { sel: null, target: null, msg: '' };
-function openTemple() { T = { sel: null, target: null, msg: '' }; $('#temple').hidden = false; drawTemple() }
+function openTemple() { T = { sel: null, target: null, msg: '', arianeConfirm: false }; $('#temple').hidden = false; drawTemple() }
 function closeTemple() { $('#temple').hidden = true; $('#temple').innerHTML = '' }
+function arianeWhy() {
+  const o = OBJETS.ariane, used = S.ariane || 0, st = cur();
+  if (S.screen !== 'q' || !st || !st.t0) return 'Utilisable seulement pendant une énigme.';
+  if (used >= o.max) return `Déjà utilisé ${o.max} fois : le fil est épuisé.`;
+  if (st.pts !== null) return 'Énigme déjà résolue.';
+  if (!pickAriane()) return 'Plus aucune autre énigme disponible.';
+  if (S.sesterces < o.prix) return `Il vous faut ${o.prix} sesterces.`;
+  return '';
+}
+function arianeHtml() {
+  const o = OBJETS.ariane, why = arianeWhy(), left = o.max - (S.ariane || 0);
+  return `<div class="eyebrow">Objets</div>
+    <div class="shop"><button class="item" id="ariane" ${why ? 'disabled' : ''} ${T.arianeConfirm && !why ? 'aria-pressed="true"' : ''}>
+     <span class="n">${esc(o.nom)} <span class="small muted">(${left} restant${left > 1 ? 's' : ''})</span></span><span class="p">${o.prix} S</span>
+     <span class="d">${T.arianeConfirm && !why ? '<b>Touchez encore pour confirmer :</b> votre énigme actuelle sera abandonnée.' : esc(why || o.desc)}</span></button></div>`;
+}
+function pickAriane() {
+  const used = new Set((S.qs || []).map(x => x.id).concat(S.arianeOld || [], [FINALE.qid])), here = quiz(cur().id);
+  const pool = QUIZ.filter(q => !used.has(q.id)); if (!pool.length) return null;
+  const same = pool.filter(q => q.zone === here.zone);
+  return shuffle(same.length ? same : pool)[0];
+}
+function useAriane() {
+  const o = OBJETS.ariane; if (arianeWhy()) { T.arianeConfirm = false; drawTemple(); return }
+  const old = cur(), oq = quiz(old.id), q = pickAriane();
+  S.sesterces -= o.prix; S.ariane = (S.ariane || 0) + 1; S.arianeOld = (S.arianeOld || []).concat(old.id);
+  S.qs[S.i] = { id: q.id, opts: shuffle([q.bonne, ...q.fausses]), wrong: [], qwrong: [], pts: null, t0: Date.now(), lockUntil: 0, elapsed: null, nophoto: false, via: null, fx: old.fx || {}, ariane: true };
+  delete PH[S.i]; ls(KEY + '-ph-' + S.i, null);
+  addLog('spend', `Fil d'Ariane : « ${oq.titre} » abandonnée pour une nouvelle énigme (−${o.prix} sesterces)`);
+  T.arianeConfirm = false; save(); closeTemple(); toast('Le fil d\'Ariane vous guide : voici une nouvelle énigme. Le chrono repart à zéro.'); render(); sync();
+}
 function curseBlock(g) {
   const now = Date.now() + (B.skew || 0), sec = t => { const n = Math.ceil((t - now) / 1000); return n >= 60 ? `${Math.floor(n / 60)} min ${String(n % 60).padStart(2, '0')}` : `${n} s` };
   if (g.done) return 'fini'; if (g.status === 'final') return 'épreuve finale';
@@ -352,6 +383,7 @@ function drawTemple(soft) {
    <section class="card">
     <div class="top"><h2>Le Temple</h2><span class="pill">${S.sesterces} sesterces</span></div>
     ${meta.cursesOn ? '' : '<p class="err">Les malédictions sont suspendues par votre enseignant·e.</p>'}
+    ${meta.disabled.includes('ariane') ? '' : arianeHtml()}
     <div class="eyebrow">Malédictions</div>
     <div class="shop">${Object.entries(CURSES).filter(([k]) => !meta.disabled.includes(k)).map(([k, c]) => `
       <button class="item" data-c="${k}" aria-pressed="${T.sel === k}" ${!allowed(k) || c.prix > S.sesterces ? 'disabled' : ''}>
@@ -374,6 +406,7 @@ function drawTemple(soft) {
     <button class="btn ghost" id="tclose">Retour à la chasse</button>
    </section></div></div>`;
   el.querySelectorAll('[data-c]').forEach(b => b.onclick = () => { T.sel = b.dataset.c; T.msg = ''; drawTemple() });
+  const ar = $('#ariane'); if (ar) ar.onclick = () => { if (!T.arianeConfirm) { T.arianeConfirm = true; drawTemple(); return } useAriane() };
   el.querySelectorAll('[data-b]').forEach(b => b.onclick = () => { T.sel = 'b:' + b.dataset.b; T.msg = ''; drawTemple() });
   const give = $('#give'); if (give) give.onclick = async () => {
     const k = T.sel.slice(2), c = BOONS[k]; if (S.sesterces < c.prix) return; give.disabled = true; give.textContent = 'Envoi…';
@@ -459,7 +492,7 @@ function joinHtml() {
   <li>Chaque énigme (un texte ou une vidéo) désigne une œuvre. Trouvez-la, <b>photographiez-la</b> (sans flash, personne dans le cadre), puis répondez à la question : la réponse se lit ou se compte devant l'œuvre.</li>
   <li><b>5 minutes</b> par énigme. Indices à 1 min 30 (la salle) et à 3 min (l'objet). Joker à choix multiples à 4 min 30.</li>
   <li>Chaque objet trouvé rapporte autant de gloire que de sesterces : 10 sans indice, puis 8, 6 ou 2. Chaque erreur fait perdre 2 et bloque 15 secondes.</li>
-  <li>Au <b>Temple</b>, dépensez vos sesterces en malédictions contre les autres groupes, en protections, ou en bienfaits pour aider un groupe allié.</li>
+  <li>Au <b>Temple</b>, dépensez vos sesterces en malédictions contre les autres groupes, en protections, en bienfaits pour aider un groupe allié, ou en <b>Fil d'Ariane</b> pour changer d'énigme si elle vous paraît impossible (deux fois au plus).</li>
   <li><b>Zeus</b> (votre enseignant·e) surveille tout depuis l'Olympe : sa foudre ignore toutes les protections.</li>
   <li>Un groupe maudit est protégé un moment par les dieux : 3 minutes au début de la chasse, de moins en moins à mesure qu'il avance, 1 minute seulement à la fin. Un groupe qui vient d'ouvrir une énigme est aussi épargné quelques secondes. On ne maudit pas deux fois de suite le même groupe. Le Temple indique qui est protégé, et pour combien de temps.</li>
   <li>Après la 8e énigme, tous les groupes se retrouvent devant la même œuvre pour l'<b>épreuve finale</b> : observer, comprendre, puis créer. Sans malédictions.</li>
