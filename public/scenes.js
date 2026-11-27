@@ -505,6 +505,38 @@ const ART = {
       <g class="sc-nod" style="--d:${t}s"><circle cx="${x}" cy="${y}" r="9" fill="${['#f2c9a5', '#e0b08a', '#f2c9a5'][i]}"/><path d="M${x - 9} ${y - 2} Q${x} ${y - 14} ${x + 9} ${y - 2}" fill="${['#ddd', '#6b4a2a', '#9a9a9a'][i]}"/><circle cx="${x - 4}" cy="${y + 1}" r="1.2" fill="#222"/></g>
       <text class="sc-zzz" style="--d:${t + .8}s" x="${x + 4}" y="${y - 14}" font-family="Marcellus, Georgia, serif" font-size="16" font-weight="700" fill="#3a2a4a">z</text></g>`).join('')}
   </svg>`,
+
+  charon: () => {
+    const ghost = (x, y, cls = '', i = 0) => `<g class="sc-ghost ${cls}" style="--i:${i}"><path d="M${x - 7} ${y} v-15 a7 7 0 0 1 14 0 v15 l-3.5 -4 l-3.5 4 l-3.5 -4 z" fill="#d6ece8" opacity=".9"/><circle cx="${x - 2.5}" cy="${y - 16}" r="1.3" fill="#1d2f2c"/><circle cx="${x + 2.5}" cy="${y - 16}" r="1.3" fill="#1d2f2c"/><ellipse cx="${x}" cy="${y - 11}" rx="1.6" ry="2" fill="#1d2f2c"/></g>`;
+    return `
+  <div class="sc-bg" style="background:linear-gradient(#0b1515,#1a2c29 52%,#0a1312)"></div>
+  <svg class="sc-svg" viewBox="0 0 200 300" aria-hidden="true">
+    <path d="M0 0 H200 V24 L188 40 L178 22 L164 52 L150 20 L136 36 L122 18 L104 48 L90 20 L74 34 L60 16 L44 44 L30 18 L16 32 L0 20 Z" fill="#050b0b"/>
+    <path d="M110 164 Q130 130 150 150 Q170 128 200 146 V166 H110 Z" fill="#0d1a19"/>
+    <rect x="160" y="118" width="22" height="40" rx="11" fill="#7a1f12" opacity=".8"/><rect x="164" y="122" width="14" height="36" rx="7" fill="#e0602a" opacity=".55"/>
+    <g fill="#050b0b"><ellipse cx="138" cy="150" rx="12" ry="6"/><circle cx="130" cy="142" r="4"/><circle cx="138" cy="139" r="4.5"/><circle cx="146" cy="142" r="4"/><path d="M127 139 l-2 -4 l4 2 M137 135 l0 -4 l3 3 M147 139 l3 -4 l-1 5" stroke="#050b0b" stroke-width="2"/></g>
+    <circle cx="129" cy="142" r=".9" fill="#ff5a2a"/><circle cx="137" cy="139" r=".9" fill="#ff5a2a"/><circle cx="147" cy="142" r=".9" fill="#ff5a2a"/>
+    <rect x="0" y="162" width="200" height="138" fill="#18302c"/>
+    <g class="sc-wave">${[[10, 180], [60, 196], [120, 184], [150, 210], [30, 240], [90, 270], [160, 262], [70, 226]].map(([x, y]) => `<path d="M${x} ${y} q8 -4 16 0 q8 4 16 0" stroke="#2f5650" stroke-width="1.6" fill="none"/>`).join('')}</g>
+    <g class="sc-mist">${[[40, 176, 40], [150, 190, 50], [90, 280, 60]].map(([x, y, r]) => `<ellipse cx="${x}" cy="${y}" rx="${r}" ry="${r / 5}" fill="#cfe3e0" opacity=".08"/>`).join('')}</g>
+    <rect x="0" y="220" width="64" height="8" fill="#4a3826"/>${[6, 30, 56].map(x => `<rect x="${x}" y="224" width="5" height="40" fill="#3a2a1c"/>`).join('')}
+    <g class="sc-dock" style="--d:30s">${ghost(14, 220, '', 0)}${ghost(32, 220, '', 1)}${ghost(50, 220, '', 2)}</g>
+    ${[4, 12, 20].map(t => `<text class="sc-q" style="--d:${t}s" x="${22 + (t % 3) * 9}" y="196" font-family="Marcellus, Georgia, serif" font-size="16" fill="#d6ece8">?</text>`).join('')}
+    <g class="sc-coin" style="--d:29.4s"><circle cx="36" cy="188" r="6" fill="#e8b830" stroke="#a87a10" stroke-width="1.5"/><text x="36" y="191" text-anchor="middle" font-family="Marcellus, Georgia, serif" font-size="7" fill="#7a5a10">I</text></g>
+    <g class="sc-boat" style="--d:30s"><g class="sc-float">
+      <line x1="178" y1="236" x2="182" y2="196" stroke="#3a2a1c" stroke-width="2.5"/><path d="M178 196 h10 v12 h-10 z" fill="#f7c46a" stroke="#6b4a2a" stroke-width="1.5"/><circle class="sc-glow" cx="183" cy="202" r="12" fill="#f7c46a" opacity=".25"/>
+      <g class="sc-aboard" style="--d:30s">${ghost(78, 240, "", 0)}${ghost(93, 240, "", 1)}${ghost(108, 240, "", 2)}</g>
+      <line x1="162" y1="128" x2="126" y2="292" stroke="#6b4a2a" stroke-width="3"/>
+      <path d="M128 238 L134 180 Q144 160 154 180 L160 238 Z" fill="#26262c"/>
+      <path d="M133 182 Q134 160 144 158 Q156 160 156 184 Q150 172 144 172 Q138 172 133 182 Z" fill="#1a1a1e"/>
+      <g class="sc-nope" style="--d:30s"><ellipse cx="144" cy="180" rx="7" ry="8" fill="#d9d4c4"/><circle cx="141" cy="178" r="2" fill="#1a1a1e"/><circle cx="147" cy="178" r="2" fill="#1a1a1e"/><circle cx="141" cy="178" r=".8" fill="#ffd27a"/><circle cx="147" cy="178" r=".8" fill="#ffd27a"/><path d="M141 185 h6" stroke="#1a1a1e" stroke-width="1.4"/><path d="M138 186 Q144 200 150 186" fill="#bdb7a6"/></g>
+      <g class="sc-palm" style="--d:30s"><path d="M136 196 Q122 204 110 204" stroke="#26262c" stroke-width="7" fill="none" stroke-linecap="round"/><ellipse cx="106" cy="203" rx="5" ry="3.4" fill="#d9d4c4"/><path d="M103 200 l-2 -3 M106 199 l0 -4 M109 200 l2 -3" stroke="#d9d4c4" stroke-width="1.6" stroke-linecap="round"/></g>
+      <path d="M62 232 Q60 226 66 230 Q72 252 100 254 L150 254 Q170 252 176 236 Q180 226 186 228 Q184 258 150 262 L100 262 Q68 260 62 232 Z" fill="#3a2a1c"/><path d="M72 244 Q100 252 176 242" stroke="#5a4430" stroke-width="2" fill="none"/>
+    </g></g>
+    <g class="sc-ask" style="--d:2s"><ellipse cx="112" cy="140" rx="22" ry="15" fill="#e9f2f0"/><circle cx="122" cy="160" r="4" fill="#e9f2f0"/><circle cx="128" cy="168" r="2.5" fill="#e9f2f0"/>
+      <circle cx="106" cy="140" r="7" fill="#e8b830" stroke="#a87a10" stroke-width="1.5"/><text x="106" y="143" text-anchor="middle" font-family="Marcellus, Georgia, serif" font-size="8" fill="#7a5a10">I</text><text x="118" y="146" font-family="Marcellus, Georgia, serif" font-size="16" fill="#1d2f2c">?</text></g>
+  </svg>`;
+  },
 };
 
 const TICK = {

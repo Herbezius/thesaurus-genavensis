@@ -198,11 +198,15 @@ function showOverlay() {
       const hasV = VID[sc.video];
       ov.innerHTML = `<div class="overlay"><div class="ov">
         <h2>${esc(sc.nom)}</h2><p>${it.from === 'Zeus' ? 'Zeus en personne vous retient !' : `Envoyé par ${esc(it.from)}.`}${it.reason ? ` <span style="color:#ffd27a">Motif : ${esc(it.reason)}</span>` : ''}</p>
+        ${sc.obole && !it.paid && el < sc.payAt ? `<button class="btn gold" id="scpay" ${S.sesterces < sc.obole ? 'disabled' : ''}>Payer l'obole : ${sc.obole} sesterces pour traverser tout de suite</button><p class="small" id="scpoor" style="color:#ffb4ab;margin:0" hidden></p>` : ''}
         ${hasV ? `<video class="sc-video" id="scv" src="${sc.video}" autoplay muted playsinline></video>` : window.TGScenes.html(sc.id, el)}
         <div class="sc-cap" id="sccap" aria-live="polite"></div>
-        <div class="sc-meta"><span>Impossible de passer : votre chrono continue.</span><span class="cd" id="ovcd"></span></div>
+        <div class="sc-meta"><span>${sc.obole ? 'Payez ou attendez : votre chrono continue.' : 'Impossible de passer : votre chrono continue.'}</span><span class="cd" id="ovcd"></span></div>
         ${hasV ? '<button class="btn ghost sm" id="scsound" style="color:#f0c9e6;border-color:#f0c9e6">Activer le son (écouteurs)</button>' : ''}
       </div></div>`;
+      if (it.paid) { const r = $('#ov .sc'); if (r) r.classList.add('paid') }
+      const pay = $('#scpay'); if (pay) pay.onclick = () => { const now = (Date.now() - it.started) / 1000; if (it.paid || S.sesterces < sc.obole || now >= sc.payAt) return;
+        S.sesterces -= sc.obole; it.paid = true; it.started = Date.now() - sc.payAt * 1000; addLog('spend', `Obole payée à Charon : −${sc.obole} sesterces`); save(); sync(); showOverlay() };
       const v = $('#scv'); if (v) { try { v.currentTime = Math.min(el, sc.dur - .5) } catch (e) {} }
       const sb = $('#scsound'); if (sb) sb.onclick = () => { v.muted = false; v.play().catch(() => {}); sb.hidden = true };
       tickScene(it, sc);
@@ -250,7 +254,8 @@ function tickOverlay() {
 function tickScene(it, sc) {
   const el = (Date.now() - it.started) / 1000, cap = $('#sccap'), cd = $('#ovcd');
   if (cd) cd.textContent = Math.max(0, Math.ceil(sc.dur - el)) + ' s';
-  if (cap) { let t = ''; for (const [s, txt] of sc.captions) if (el >= s) t = txt; if (cap.textContent !== t) cap.textContent = t }
+  if (cap) { let t = ''; for (const [s, txt] of sc.captions) if (el >= s) t = txt; if (it.paid && sc.paidCaption) t = sc.paidCaption; if (cap.textContent !== t) cap.textContent = t }
+  const pay = $('#scpay'); if (pay) { if (el >= sc.payAt) { pay.remove(); const n = $('#scpoor'); if (n) n.remove() } else { const poor = S.sesterces < sc.obole; pay.disabled = poor; const n = $('#scpoor'); if (n) { n.hidden = !poor; n.textContent = `Il vous faut ${sc.obole} sesterces : vous n'en avez que ${S.sesterces}. Sinon, vous attendrez.` } } }
   window.TGScenes.tick(sc.id, el, document.querySelector('#ov .sc'));
 }
 

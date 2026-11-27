@@ -40,7 +40,7 @@
  let cur = q.get('scene') || SCENES[0].id, t0 = Date.now() - (parseFloat(q.get('t')) || 0) * 1000;
  const frozen = q.has('freeze');
  function play(id, at = 0) {
-  cur = id; t0 = Date.now() - at * 1000; const sc = SCENES.find(x => x.id === id);
+  if (id !== cur) paid = false; cur = id; t0 = Date.now() - at * 1000; const sc = SCENES.find(x => x.id === id);
   $('#pick').innerHTML = SCENES.map(x => `<button data-s="${x.id}" aria-pressed="${x.id === id}">${esc(x.nom)}</button>`).join('');
   $('#pick').querySelectorAll('button').forEach(b => b.onclick = () => play(b.dataset.s));
   $('#stage').innerHTML = window.TGScenes.html(id, at);
@@ -51,11 +51,15 @@
  }
  function tick() {
   const sc = SCENES.find(x => x.id === cur), el = frozen ? (parseFloat(q.get('t')) || 0) : Math.min(sc.dur, (Date.now() - t0) / 1000);
-  let txt = ''; for (const [s, c] of sc.captions) if (el >= s) txt = c;
+  let txt = ''; for (const [s, c] of sc.captions) if (el >= s) txt = c; if (paid && sc.paidCaption) txt = sc.paidCaption;
+  payBtn.hidden = !(sc.obole && !paid && el < sc.payAt);
   $('#sccap').textContent = txt; $('#cd').textContent = Math.max(0, Math.ceil(sc.dur - el)) + ' s';
   window.TGScenes.tick(cur, el, document.querySelector('#stage .sc'));
  }
- $('#replay').onclick = () => play(cur);
+ let paid = false;
+ $('#replay').onclick = () => { paid = false; play(cur) };
+ const payBtn = document.createElement('button'); payBtn.className = 'btn gold sm'; payBtn.textContent = 'Simuler le paiement de l\'obole'; payBtn.hidden = true; $('#replay').after(payBtn);
+ payBtn.onclick = () => { const sc = SCENES.find(x => x.id === cur); paid = true; play(cur, sc.payAt); document.querySelector('#stage .sc').classList.add('paid') };
  setInterval(() => { if (!frozen) tick() }, 100);
  play(cur, parseFloat(q.get('t')) || 0);
 })();

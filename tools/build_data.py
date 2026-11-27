@@ -166,6 +166,12 @@ SCENES = [
   fact="En 63 av. J.-C., le consul Cicéron dénonce devant le Sénat le complot de Catilina dans quatre discours, les Catilinaires, dont le premier commence par « Quo usque tandem… ». Au tribunal, le temps de parole se mesurait avec une clepsydre, une horloge à eau : l'avocat qui voulait parler plus longtemps demandait… plus d'eau.",
   voir="les portraits de Romains de la fin de la République : Caton, Brutus, Pompée le Jeune (salle 115)",
   flash=dict(q="Avec quoi mesurait-on le temps de parole dans un tribunal romain ?", ok="Une clepsydre (horloge à eau)", bad=["Un sablier", "Un cadran solaire", "Une bougie graduée"])),
+ dict(id="charon", nom="La barque de Charon", dur=36, video="videos/scene-charon.mp4", obole=5, payAt=30,
+  captions=[[0, "Charon, passeur des Enfers. Pour traverser le Styx : une obole."], [5, "Pas d'obole ? Alors on attend sur la rive."], [11, "Les morts sans obole erraient cent ans au bord du Styx…"], [18, "Je suis bon prince : quelques secondes suffiront."], [25, "Toujours rien ? Je compte mes pièces, alors."], [30, "Bon, montez. Mais je m'en souviendrai."]],
+  paidCaption="Merci pour l'obole ! Tout le monde à bord.",
+  fact="Pour les Grecs, Charon fait traverser aux morts le fleuve des Enfers (le Styx, ou l'Achéron selon les auteurs). Il faut le payer : on plaçait une petite pièce, une obole, dans la bouche du défunt. Les morts sans sépulture ni obole erraient cent ans sur la rive. Le chien à trois têtes Cerbère garde l'autre côté.",
+  voir="les monnaies grecques du musée",
+  flash=dict(q="Où plaçait-on l'obole destinée à Charon ?", ok="Dans la bouche du défunt", bad=["Dans sa main droite", "Sur sa tombe", "Dans un vase à côté de lui"])),
 ]
 out = "/* Données du jeu (générées par tools/build_data.py) */\nwindow.TG=" + json.dumps(dict(QUIZ=QUIZ, SPHINX=SPHINX, CURSES=CURSES, PROTECTIONS=PROTECTIONS, BOONS=BOONS, SCENES=SCENES), ensure_ascii=False) + ";\n"
 pathlib.Path(sys.argv[2]).write_text(out)
