@@ -102,7 +102,7 @@ const routes = {
     Object.assign(g, {
       idx: num(st.idx, g.idx, meta.total + 1), found: num(st.found, g.found, meta.total + 1), sesterces: num(st.sesterces, g.sesterces, 9999), gloire: num(st.gloire, g.gloire || 0, 9999),
       status: ["ready", "q", "res", "final", "end"].includes(st.status) ? st.status : g.status,
-      final: st.final && typeof st.final === "object" ? { step: num(st.final.step, 0, 9), score: num(st.final.score, 0, 99), text: clean(st.final.text, 900), sent: !!st.final.sent } : g.final,
+      final: st.final && typeof st.final === "object" ? { step: num(st.final.step, 0, 9), score: num(st.final.score, 0, 99), text: clean(st.final.text, 900), sent: !!st.final.sent, mission: ["bulle", "chant"].includes(st.final.mission) ? st.final.mission : null } : g.final,
       qStart: st.status === "q" ? num(st.qStart, now, now + 60000) : null, done: !!st.done,
       protections: { egide: num(st.protections?.egide, 0, 1), miroir: num(st.protections?.miroir, 0, 1) },
       qid: num(st.qid, 0, 999), pending: Array.isArray(st.pending) ? st.pending.filter(x => typeof x === "string").slice(0, 6) : [],

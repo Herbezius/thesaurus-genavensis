@@ -286,20 +286,32 @@ ${PH[N] || f.nophoto ? '' : `<button class="link" id="fnoph">Continuer sans phot
 </section>
 ${a != null ? `<button class="btn" id="fnext">${f.step < F.mcq.length ? 'Question suivante' : 'Dernière étape : réfléchir'}</button>` : ''}`;
   }
-  if (f.step === F.mcq.length + 1) return `${head}
+  if (f.step === F.mcq.length + 1) {
+    const M = F.missions.find(m => m.id === f.mission);
+    if (!M) return `${head}
 <section class="card">
- <div class="eyebrow">Réfléchir · votre réponse sera lue par Zeus</div>
- <p style="font-size:19px;font-weight:600">${esc(F.reflexion)}</p>
- <textarea id="ftxt" rows="6" maxlength="900" style="width:100%;font:inherit;padding:10px;border-radius:10px" placeholder="Écrivez ensemble, en phrases complètes…">${esc(f.text)}</textarea>
+ <div class="eyebrow">Créer · dernière mission</div>
+ <h2>À vous de faire parler le tableau</h2>
+ <p>Choisissez votre mission. Zeus lira les créations à voix haute devant le tableau, à la fin de la visite.</p>
+ <div class="opts">${F.missions.map(m => `<button class="opt" data-mis="${m.id}"><b>${esc(m.titre)}</b> · ${esc(m.court)}</button>`).join('')}</div>
+</section>`;
+    return `${head}
+<section class="card">
+ <div class="eyebrow">Créer · ${esc(M.titre)}</div>
+ <p style="font-size:17px">${esc(M.consigne)}</p>
+ <p class="small muted">${esc(M.aide)}</p>
+ <textarea id="ftxt" rows="6" maxlength="900" style="width:100%;font:inherit;padding:10px;border-radius:10px" placeholder="${esc(M.placeholder.replace('{nom}', S.name))}">${esc(f.text)}</textarea>
  <p class="small muted" id="fcount"></p>
+ <button class="link" id="fswap">Changer de mission</button>
 </section>
 <button class="btn gold" id="fsend" disabled>Envoyer à Zeus</button>`;
+  }
   return `${head}
 <section class="card">
  <div class="eyebrow">Épreuve finale accomplie</div>
  <h2>Le chant continue</h2>
- <p>Votre réflexion est partie vers l'Olympe : Zeus peut la récompenser. Vous gagnez le 9e trésor.</p>
- <p class="small muted">Questions justes : ${f.score / FINALE.ptsQcm} sur ${FINALE.mcq.length} · réflexion envoyée : +${FINALE.ptsTexte} gloire.</p>
+ <p>Votre ${f.mission === 'chant' ? 'chant est parti' : 'bulle est partie'} vers l'Olympe : Zeus ${f.mission === 'chant' ? 'le' : 'la'} lira à voix haute devant le tableau, et peut ${f.mission === 'chant' ? 'le' : 'la'} récompenser. Vous gagnez le 9e trésor.</p>
+ <p class="small muted">Questions justes : ${f.score / FINALE.ptsQcm} sur ${FINALE.mcq.length} · création envoyée : +${FINALE.ptsTexte} gloire.</p>
 </section>
 <button class="btn" id="fend">Voir le classement</button>`;
 }
@@ -310,9 +322,11 @@ function bindFinal() {
   const g = $('#fgo'); if (g) g.onclick = go(() => { f.step = 1 });
   document.querySelectorAll('[data-f]').forEach(b => b.onclick = go(() => { const i = f.step - 1, m = F.mcq[i]; if (f.answers[i] != null) return; const o = f.opts[i][+b.dataset.f]; f.answers[i] = o; if (o === m.ok) { f.score += F.ptsQcm; S.gloire = (S.gloire || 0) + F.ptsQcm } }));
   const n = $('#fnext'); if (n) n.onclick = go(() => { f.step++ });
+  document.querySelectorAll('[data-mis]').forEach(b => b.onclick = go(() => { f.mission = b.dataset.mis }));
+  const sw = $('#fswap'); if (sw) sw.onclick = go(() => { f.mission = null });
   const t = $('#ftxt'), c = $('#fcount'), send = $('#fsend');
-  if (t) { const upd = () => { const L = t.value.trim().length; c.textContent = L < F.minChars ? `Encore ${F.minChars - L} caractères au minimum.` : `${L} caractères : prêt à envoyer.`; send.disabled = L < F.minChars; f.text = t.value; save() }; t.oninput = upd; upd() }
-  if (send) send.onclick = go(() => { if (f.sent || f.text.trim().length < F.minChars) return; f.text = f.text.trim(); f.sent = true; f.step = F.mcq.length + 2; S.gloire = (S.gloire || 0) + F.ptsTexte; S.found++; addLog('boon', `Épreuve finale accomplie : +${F.ptsTexte} gloire et 9e trésor`) });
+  if (t) { const upd = () => { const L = t.value.trim().length; c.textContent = L < F.minChars ? `Encore ${F.minChars - L} caractères au minimum.` : 'Prêt à partir pour l\'Olympe.'; send.disabled = L < F.minChars; f.text = t.value; save() }; t.oninput = upd; upd() }
+  if (send) send.onclick = go(() => { if (f.sent || f.text.trim().length < F.minChars) return; f.text = f.text.trim(); f.sent = true; f.step = F.mcq.length + 2; S.gloire = (S.gloire || 0) + F.ptsTexte; S.found++; addLog('boon', `Épreuve finale accomplie (${(F.missions.find(m => m.id === f.mission) || {}).titre || ''}) : +${F.ptsTexte} gloire et 9e trésor`) });
   const e = $('#fend'); if (e) e.onclick = go(() => { S.screen = 'end' });
 }
 
@@ -448,7 +462,7 @@ function joinHtml() {
   <li>Au <b>Temple</b>, dépensez vos sesterces en malédictions contre les autres groupes, en protections, ou en bienfaits pour aider un groupe allié.</li>
   <li><b>Zeus</b> (votre enseignant·e) surveille tout depuis l'Olympe : sa foudre ignore toutes les protections.</li>
   <li>Un groupe maudit est protégé un moment par les dieux : 3 minutes au début de la chasse, de moins en moins à mesure qu'il avance, 1 minute seulement à la fin. Un groupe qui vient d'ouvrir une énigme est aussi épargné quelques secondes. On ne maudit pas deux fois de suite le même groupe. Le Temple indique qui est protégé, et pour combien de temps.</li>
-  <li>Après la 8e énigme, tous les groupes se retrouvent devant la même œuvre pour l'<b>épreuve finale</b> : observation et réflexion, sans malédictions.</li>
+  <li>Après la 8e énigme, tous les groupes se retrouvent devant la même œuvre pour l'<b>épreuve finale</b> : observer, comprendre, puis créer. Sans malédictions.</li>
   <li>Au musée : on marche, on parle bas, on ne touche à rien. Zeus peut retirer de la gloire à ceux qui courent ou crient.</li>
  </ul>
 </section>`;

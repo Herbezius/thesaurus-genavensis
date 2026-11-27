@@ -185,11 +185,20 @@ FINALE = dict(qid=29, titre="Homère chantant son Odyssée", artiste="Jean-Pierr
      expl="Avant d'être mises par écrit, les épopées homériques ont longtemps été chantées de mémoire par des aèdes, des poètes qui allaient de ville en ville."),
    dict(q="Le garçon qui guide le poète tient un rouleau. Que peut symboliser ce détail ?", ok="Le chant qui sera conservé grâce à l'écriture", bad=["Une carte pour retrouver Ithaque", "Le salaire du poète", "La liste des habitants du village"],
      expl="Le rouleau (volumen) annonce le passage de la parole au texte : c'est parce qu'on l'a écrite que l'Odyssée est arrivée jusqu'à nous."),
-   dict(q="Saint-Ours, peintre genevois, peint cette scène à la fin du XVIIIe siècle. Qu'admirent alors les artistes dans la Grèce antique ?", ok="Un modèle de simplicité, de beauté et de vertu", bad=["Les fondateurs grecs de Genève", "Une civilisation qu'on venait tout juste de découvrir", "Le luxe des palais royaux"],
-     expl="Les peintres néoclassiques voient dans l'Antiquité un idéal de noblesse simple et de vertu civique. Un poète qui chante pour tout un village, sans palais ni roi, illustre bien cet idéal."),
+   dict(q="Homère ne chante pas dans un palais pour un roi, mais à l'entrée d'un village, devant des gens simples. Qu'est-ce que le peintre veut montrer ?", ok="Les belles histoires appartiennent à tout le monde", bad=["Homère n'avait pas le droit d'entrer en ville", "Les villageois l'avaient payé très cher", "Le palais du roi était en travaux"],
+     expl="Saint-Ours peint ce tableau à Genève en 1793, juste après une révolution qui a donné les mêmes droits à tous les citoyens. Un poète qui chante pour tout un village, sans roi ni palais : c'est l'image d'un savoir partagé par tous."),
   ],
-  reflexion="En 2 ou 3 phrases : près de 2800 ans plus tard, pourquoi raconte-t-on encore l'histoire d'Ulysse ? Appuyez-vous sur un détail du tableau ou sur une œuvre vue pendant la chasse.",
-  minChars=120, ptsQcm=3, ptsTexte=5)
+  missions=[
+   dict(id="bulle", titre="La bulle", court="Faire penser un personnage",
+     consigne="Choisissez un personnage du tableau, mais pas Homère : un auditeur, un enfant, le garçon qui guide… Écrivez ce qu'il pense pendant le chant, dans une ou deux bulles. Indiquez d'abord où il se trouve.",
+     aide="À la fin, Zeus lira vos bulles à voix haute : les autres groupes devront retrouver qui pense ça.",
+     placeholder="Le personnage à gauche, assis par terre : « Encore un Cyclope ? Il nous l'a déjà raconté hier… »"),
+   dict(id="chant", titre="Le chant", court="Votre chasse façon Homère",
+     consigne="Homère donne à ses héros des surnoms qui reviennent sans cesse : « Ulysse aux mille ruses », « Aurore aux doigts de rose », « Achille aux pieds rapides ». À votre tour : commencez l'épopée de votre propre chasse. Donnez un surnom à votre groupe et à un groupe rival, et racontez un épisode, malédictions comprises.",
+     aide="Commencez comme Homère : « Chante, ô Muse… ». Zeus lira les meilleurs chants à voix haute.",
+     placeholder="Chante, ô Muse, {nom} aux pieds rapides, que la colère de Charon retint sur la rive du Styx…"),
+  ],
+  minChars=60, ptsQcm=3, ptsTexte=5)
 
 out = "/* Données du jeu (générées par tools/build_data.py) */\nwindow.TG=" + json.dumps(dict(QUIZ=QUIZ, SPHINX=SPHINX, CURSES=CURSES, PROTECTIONS=PROTECTIONS, BOONS=BOONS, SCENES=SCENES, FINALE=FINALE), ensure_ascii=False) + ";\n"
 pathlib.Path(sys.argv[2]).write_text(out)
