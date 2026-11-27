@@ -291,6 +291,46 @@ td.n,th.n{font-family:var(--mono);text-align:right;white-space:nowrap;font-varia
 @keyframes hOut{0%{transform:none}20%{transform:translateX(-8px)}100%{transform:translateX(170px)}}
 .sc-sandals{animation:steal 1.8s ease-in var(--dl) both}@keyframes steal{0%{transform:none}35%{transform:translate(48px,-28px) rotate(-20deg)}100%{transform:translate(220px,-28px) rotate(-20deg)}}
 .sc-speed{opacity:0;animation:speed 1.4s ease-out var(--dl) both}@keyframes speed{0%{opacity:0;transform:translateX(40px)}30%{opacity:1}100%{opacity:0;transform:translateX(-30px)}}
+/* Circé */
+.sc-bub{animation:bub 1.6s ease-in infinite;animation-delay:calc(var(--i) * -.32s)}
+@keyframes bub{0%{transform:translateY(0) scale(.6);opacity:0}20%{opacity:1}100%{transform:translateY(-22px) scale(1.2);opacity:0}}
+.sc-steam{animation:steam 2.4s ease-in-out infinite alternate}@keyframes steam{from{transform:translateY(0);opacity:.25}to{transform:translateY(-6px);opacity:.55}}
+.sc-flame{transform-origin:50% 100%;animation:flame .25s ease-in-out infinite alternate}@keyframes flame{from{transform:scaleY(.85)}to{transform:scaleY(1.12)}}
+.sc-circe{transform-origin:50% 100%;animation:bob 1.8s ease-in-out infinite alternate}
+.sc-wand{transform-origin:0% 100%;animation:wand 1.1s ease-in-out var(--dl) both}
+@keyframes wand{0%{transform:none}40%{transform:rotate(-25deg)}70%{transform:rotate(30deg)}100%{transform:rotate(8deg)}}
+.sc-beamz{opacity:0;animation:zap 1.2s ease-out var(--dl) both}@keyframes zap{0%{opacity:0;stroke-dashoffset:0}15%{opacity:1}100%{opacity:0;stroke-dashoffset:-40}}
+.sc-poof{opacity:0;animation:dust 1.4s ease-out var(--dl) both}
+.sc-pig{animation:hop 1.2s ease-in-out infinite;animation-delay:calc(var(--i) * -.4s)}
+/* Polyphème */
+.sc-cyc{transform-origin:50% 100%;animation:bob 2.2s ease-in-out infinite alternate}
+.sc-pat{animation:pat .5s ease-in-out infinite alternate}@keyframes pat{from{transform:translateY(-3px)}to{transform:translateY(5px)}}
+.sc-sheep{animation:sheep 4.5s linear var(--dl) both}@keyframes sheep{from{transform:translateX(-60px)}to{transform:translateX(260px)}}
+.sc-sbob{animation:sbob .3s ease-in-out infinite alternate}@keyframes sbob{to{transform:translateY(-2px)}}
+.sc-cbrow{animation:cbrow .5s ease-out var(--dl) both}@keyframes cbrow{to{transform:translateY(-6px) rotate(-5deg)}}
+/* Narcisse */
+.sc-ripple{transform-origin:50% 50%;animation:ripple 2.4s ease-in-out infinite alternate}@keyframes ripple{from{transform:scaleX(1) skewX(0)}to{transform:scaleX(1.06) skewX(5deg)}}
+.sc-wave{animation:wavey 3s ease-in-out infinite alternate}@keyframes wavey{to{transform:translateX(6px)}}
+.sc-heart{opacity:0;animation:heart 2.6s ease-out var(--dl) both}@keyframes heart{0%{opacity:0;transform:translateY(0) scale(.4)}20%{opacity:1;transform:scale(1)}100%{opacity:0;transform:translateY(-40px) scale(1.1)}}
+.sc-nhead{transform-origin:20% 90%;animation:sigh 3s ease-in-out infinite alternate}@keyframes sigh{from{transform:rotate(-3deg)}to{transform:rotate(6deg)}}
+.sc-nar{animation:fadeOut 1.2s ease-in var(--dl) both}@keyframes fadeOut{to{opacity:0}}
+.sc-grow{transform-origin:50% 100%;animation:grow 1.6s cubic-bezier(.3,1.4,.5,1) var(--dl) both}@keyframes grow{from{transform:scale(0)}to{transform:scale(1)}}
+.sc-echoface{animation:peek 3s ease-in-out infinite alternate}@keyframes peek{from{transform:translateX(3px)}to{transform:translateX(-3px)}}
+/* Hypnos */
+.sc-star{animation:tw 2s ease-in-out infinite alternate;animation-delay:calc(var(--i) * -.37s)}@keyframes tw{from{opacity:.25}to{opacity:1}}
+.sc-hyp{animation:hfly 20s linear calc(0s - var(--el)) both}@keyframes hfly{from{transform:translateX(-30px)}to{transform:translateX(26px)}}
+.sc-hbob{animation:bob 1.4s ease-in-out infinite alternate}
+.sc-hwl{transform-origin:100% 80%;animation:flapL .6s ease-in-out infinite alternate}@keyframes flapL{from{transform:rotate(8deg)}to{transform:rotate(-14deg)}}
+.sc-hwr{transform-origin:0% 80%;animation:flapR .6s ease-in-out infinite alternate}@keyframes flapR{from{transform:rotate(-8deg)}to{transform:rotate(14deg)}}
+.sc-grain{animation:grain 2.2s linear infinite;animation-delay:calc(var(--i) * -.18s)}
+@keyframes grain{0%{transform:translate(0,0);opacity:0}10%{opacity:1}100%{transform:translate(calc(var(--x) * 1px),80px);opacity:0}}
+.sc-zzz{opacity:0;animation:zzz 2s ease-out var(--dl) infinite both}@keyframes zzz{0%{opacity:0;transform:translate(0,0)}30%{opacity:1}100%{opacity:0;transform:translate(10px,-24px)}}
+/* Midas */
+.sc-spark{opacity:0;animation:spark .9s ease-out var(--dl) both}@keyframes spark{0%{opacity:0;transform:scale(.2) rotate(0)}30%{opacity:1;transform:scale(1.3) rotate(30deg)}100%{opacity:0;transform:scale(1.6) rotate(60deg)}}
+/* Cicéron */
+.sc-orate{transform-origin:0% 100%;animation:orate 1.2s ease-in-out infinite alternate}@keyframes orate{from{transform:rotate(-8deg)}to{transform:rotate(12deg)}}
+.sc-nod{transform-origin:50% 100%;animation:nod 1.2s ease-in var(--dl) both}@keyframes nod{to{transform:rotate(24deg) translateY(2px)}}
+.sc-drip{stroke-dasharray:3 4;animation:drip .4s linear infinite}@keyframes drip{to{stroke-dashoffset:-7}}
 @media (prefers-reduced-motion:reduce){.sc *{animation-duration:.01s!important;animation-iteration-count:1!important}}
 
 .sc-hourglass{transform-origin:50% 50%;animation:spin 2.4s ease-in-out infinite}
