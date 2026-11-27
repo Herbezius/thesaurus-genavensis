@@ -77,7 +77,7 @@ function drawLive() {
 </div>
 <section class="card" id="startbox"></section>
 <section style="display:grid;gap:10px"><div class="top"><h2>L'Olympe · vue de Zeus</h2><span class="small muted" id="upd"></span></div>
- <p class="small muted">Chaque carte montre où en est le groupe. Le menu de Zeus envoie une malédiction (elle ignore les protections et les règles), un bienfait ou des sesterces.</p>
+ <p class="small muted">Chaque carte montre où en est le groupe. Le menu de Zeus envoie une malédiction (elle ignore les protections et les règles), un bienfait, de la gloire (qui compte pour le classement) ou des sesterces (la monnaie du Temple).</p>
  <div class="olympe" id="groups"><p class="muted">Chargement…</p></div></section>
 <section class="card" id="finbox"></section>
 <section class="card"><h2>Malédictions et bienfaits en direct</h2><div class="feed" id="feed"></div></section>
@@ -109,14 +109,14 @@ function fillLive() {
     $('#bon').onchange = e => setSettings({ boonsOn: e.target.checked });
     st.querySelectorAll('[data-d]').forEach(c => c.onchange = () => setSettings({ disabled: [...st.querySelectorAll('[data-d]')].filter(x => !x.checked).map(x => x.dataset.d) }));
   }
-  const gs = BD.groups.slice().sort((a, b) => b.found - a.found || b.sesterces - a.sesterces);
+  const gs = BD.groups.slice().sort((a, b) => (b.gloire || 0) - (a.gloire || 0) || b.found - a.found);
   const box = $('#groups');
   if (!box.contains(document.activeElement)) {
     const zeusOpts = `<option value="">Action de Zeus…</option>
       <optgroup label="Foudre (malédiction)">${Object.entries(CURSES).map(([k, c]) => `<option value="curse:${k}">${esc(c.nom)}${k === 'colere' ? ' (au hasard)' : ''}</option>`).join('')}</optgroup>
       <optgroup label="Colère des dieux : scène précise">${SCENES.filter(x => x.id !== 'meduse').map(x => `<option value="scene:${x.id}">${esc(x.nom)}</option>`).join('')}</optgroup>
       <optgroup label="Bienfait">${['don5', 'don10', 'egide', 'apollon'].map(k => `<option value="boon:${k}">${esc(BOONS[k].nom)}</option>`).join('')}<option value="boon:miroir">${esc(PROTECTIONS.miroir.nom)}</option></optgroup>
-      <optgroup label="Sesterces">${[5, 10, -5, -10].map(n => `<option value="adj:${n}">${n > 0 ? '+' : '−'}${Math.abs(n)} sesterces</option>`).join('')}</optgroup>`;
+      <optgroup label="Gloire (classement)">${[5, 10, -5, -10].map(n => `<option value="glo:${n}">${n > 0 ? '+' : '−'}${Math.abs(n)} gloire</option>`).join('')}</optgroup><optgroup label="Sesterces (monnaie du Temple)">${[5, 10, -5, -10].map(n => `<option value="adj:${n}">${n > 0 ? '+' : '−'}${Math.abs(n)} sesterces</option>`).join('')}</optgroup>`;
     const motifOpts = `<option value="">Sans motif</option><optgroup label="Rappel à l'ordre">${MOTIFS_MAL.map(m => `<option>${esc(m)}</option>`).join('')}</optgroup><optgroup label="Félicitations">${MOTIFS_BIEN.map(m => `<option>${esc(m)}</option>`).join('')}</optgroup>`;
     const label = { ready: 'Entre deux énigmes', q: 'En recherche', res: 'Vient de répondre', final: 'Épreuve finale (salle 408)', end: 'Terminé' };
     box.innerHTML = gs.length ? gs.map((g, i) => { const q = QUIZ.find(x => x.id === g.qid);
@@ -125,7 +125,7 @@ function fillLive() {
       return `<article class="gcard ${g.online || g.done ? '' : 'off'} ${g.done ? 'done' : ''}">
        <div class="hd"><b>${i + 1}. ${esc(g.name)}</b><span class="dot ${g.online || g.done ? '' : 'off'}" title="${g.online ? 'en ligne' : 'hors ligne'}"></span></div>
        <div class="small muted">${g.players.map(esc).join(', ')}${g.online || g.done ? '' : ' · <span class="err">hors ligne</span>'}</div>
-       <div class="stats"><span><b>${g.found}</b> trésors</span><span><b>${g.sesterces}</b> S</span><span>${g.done ? 'Fini' : g.status === 'final' ? '<b>Finale</b>' : `Énigme <b>${Math.min(g.idx + 1, g.total)}</b>/${g.total}`}</span></div>
+       <div class="stats"><span><b>${g.gloire || 0}</b> gloire</span><span><b>${g.found}</b> trésors</span><span><b>${g.sesterces}</b> S</span><span>${g.done ? 'Fini' : g.status === 'final' ? '<b>Finale</b>' : `Énigme <b>${Math.min(g.idx + 1, g.total)}</b>/${g.total}`}</span></div>
        ${g.done ? '' : `<div class="now">${label[g.status] || ''}${q ? ` · <b>${esc(q.titre)}</b> <span class="muted small">(${esc(q.salle)})</span>` : ''}${g.status === 'q' && g.qStart ? ` · depuis <span class="w">${mmss(BD.now - g.qStart)}</span>` : ''}</div>`}
        ${prot ? `<div class="small">Protégé : ${prot}</div>` : ''}${g.immUntil && g.immUntil > BD.now ? `<div class="small muted">Immunité divine encore ${mmss(g.immUntil - BD.now)}</div>` : ''}${pend ? `<div class="small" style="color:var(--curse)">En attente : ${esc(pend)}</div>` : ''}
        <div class="zeus"><select data-z="${g.gid}" aria-label="Action de Zeus pour ${esc(g.name)}">${zeusOpts}</select></div>
@@ -138,7 +138,7 @@ function fillLive() {
   }
   const nomOf = c => c.type === 'note' ? esc(c.text) : c.kind === 'boon' ? '<span style="color:var(--verd)">' + esc((BOONS[c.type] || PROTECTIONS[c.type] || {}).nom || c.type) + '</span>' : esc(CURSES[c.type]?.nom || c.type) + (c.scene ? ' : ' + esc((SCENES.find(x => x.id === c.scene) || {}).nom || c.scene) : '') + (c.reflected ? ' <span class="small" style="color:var(--curse)">(renvoyée par le Miroir)</span>' : '');
   const fb = $('#finbox'); if (fb && !fb.contains(document.activeElement)) { const fin = BD.groups.filter(g => g.final && (g.final.sent || g.status === 'final'));
-    fb.innerHTML = `<h2>Épreuve finale : ${esc(FINALE.titre)}</h2><p class="small muted">${esc(FINALE.salle)} · tous les groupes s'y retrouvent après leur 8e énigme. Leurs réflexions arrivent ici : lisez-les en conclusion de la visite, et récompensez les meilleures avec le menu de Zeus (« +5 sesterces », motif « Excellente observation »).</p><p class="small"><b>Question :</b> ${esc(FINALE.reflexion)}</p>` +
+    fb.innerHTML = `<h2>Épreuve finale : ${esc(FINALE.titre)}</h2><p class="small muted">${esc(FINALE.salle)} · tous les groupes s'y retrouvent après leur 8e énigme. Leurs réflexions arrivent ici : lisez-les en conclusion de la visite, et récompensez les meilleures avec le menu de Zeus (« +5 gloire », motif « Excellente observation »).</p><p class="small"><b>Question :</b> ${esc(FINALE.reflexion)}</p>` +
       (fin.length ? fin.map(g => `<div class="rep"><div><b>${esc(g.name)}</b> <span class="muted small">${g.final.sent ? `QCM ${g.final.score / FINALE.ptsQcm}/${FINALE.mcq.length}` : `en cours (étape ${g.final.step}/${FINALE.mcq.length + 1})`}</span></div>${g.final.sent ? `<p style="margin:.3em 0 0;white-space:pre-wrap">${esc(g.final.text)}</p>` : ''}</div>`).join('') : '<p class="muted small">Aucun groupe n\'a encore atteint la finale.</p>') }
   $('#feed').innerHTML = BD.curses.length ? BD.curses.map(c => `<div><span class="muted small">${hm(c.ts)}</span> <b>${c.zeus ? 'Zeus' : esc(c.fromName)}</b> → <b>${esc(c.toName)}</b> : ${nomOf(c)}${c.reason ? ` <span class="small muted">(${esc(c.reason)})</span>` : ''}</div>`).join('') : '<p class="muted">Rien pour l\'instant.</p>';
 }
@@ -146,7 +146,7 @@ async function zeus(gid, v, motif) {
   if (!v) { toast('Choisissez d\'abord une action.'); return }
   const [kind, type] = v.split(':'); const g = BD.groups.find(x => x.gid === gid);
   try {
-    if (kind === 'adj') await api('prof/adjust', { ...auth(), gid, amount: +type, reason: (+type < 0 ? 'Colère de Zeus' : 'Générosité de Zeus') + (motif ? ' : ' + motif : '') });
+    if (kind === 'adj' || kind === 'glo') await api('prof/adjust', { ...auth(), gid, kind: kind === 'glo' ? 'gloire' : 'sesterces', amount: +type, reason: (+type < 0 ? 'Colère de Zeus' : 'Générosité de Zeus') + (motif ? ' : ' + motif : '') });
     else if (kind === 'scene') await api('prof/zeus', { ...auth(), gid, kind: 'curse', type: 'colere', scene: type, reason: motif });
     else await api('prof/zeus', { ...auth(), gid, kind, type, reason: motif });
     toast(`Zeus a frappé : ${g ? g.name : ''}.`); ZSEL[gid] = ''; ZMOT[gid] = ''; poll();
@@ -187,7 +187,7 @@ function drawRep() {
 function drawSol() {
   $('#tab').innerHTML = `<section class="card"><div class="zone">Épreuve finale · ${esc(FINALE.salle)}</div><div class="rep"><div><b>${esc(FINALE.titre)}</b> <span class="muted small">${esc(FINALE.artiste)} · inv. ${esc(FINALE.inv)}</span></div>
     ${FINALE.mcq.map((m, i) => `<p class="small" style="margin:.4em 0 0"><b>${i + 1}.</b> ${esc(m.q)}<br>→ <b>${esc(m.ok)}</b>. ${esc(m.expl)}</p>`).join('')}
-    <p class="small" style="margin:.4em 0 0"><b>Réflexion :</b> ${esc(FINALE.reflexion)} (au moins ${FINALE.minChars} caractères, +${FINALE.ptsTexte} sesterces à l'envoi ; Zeus peut ajouter un bonus.)</p></div></section>` + ZONES.map(z => `<section class="card"><div class="zone">${esc(ZLAB[z])}</div>${QUIZ.filter(q => q.zone === z && q.id !== FINALE.qid).map(q => `<div class="rep"><div><b>${esc(q.titre)}</b> <span class="muted small">inv. ${esc(q.inv)}</span></div><div class="small">${esc(q.question)} → <b>${esc(q.bonne)}</b></div></div>`).join('')}</section>`).join('');
+    <p class="small" style="margin:.4em 0 0"><b>Réflexion :</b> ${esc(FINALE.reflexion)} (au moins ${FINALE.minChars} caractères, +${FINALE.ptsTexte} gloire à l'envoi ; Zeus peut ajouter un bonus.)</p></div></section>` + ZONES.map(z => `<section class="card"><div class="zone">${esc(ZLAB[z])}</div>${QUIZ.filter(q => q.zone === z && q.id !== FINALE.qid).map(q => `<div class="rep"><div><b>${esc(q.titre)}</b> <span class="muted small">inv. ${esc(q.inv)}</span></div><div class="small">${esc(q.question)} → <b>${esc(q.bonne)}</b></div></div>`).join('')}</section>`).join('');
 }
 render(); if (P) poll();
 })();

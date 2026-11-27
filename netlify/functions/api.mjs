@@ -40,7 +40,7 @@ async function getAll(s, prefix, filter) {
 }
 function publicGroup(g, now, imm) {
   const im = imm && imm[g.gid];
-  return { gid: g.gid, name: g.name, players: g.players, idx: g.idx, total: g.total, found: g.found, sesterces: g.sesterces,
+  return { gid: g.gid, name: g.name, players: g.players, idx: g.idx, total: g.total, found: g.found, sesterces: g.sesterces, gloire: g.gloire || 0,
     status: g.status, done: !!g.done, online: now - (g.updated || 0) < ONLINE_MS, protections: g.protections || {},
     immUntil: im && im.until > now ? im.until : null,
     graceUntil: g.status === "q" && g.qStart && g.qStart + graceMs(g.idx) > now ? g.qStart + graceMs(g.idx) : null };
@@ -100,7 +100,7 @@ const routes = {
     const { meta, code, g } = ctx, k = K(code), now = Date.now(), st = b.state || {};
     const num = (v, d, max) => Number.isFinite(+v) ? Math.max(0, Math.min(max, Math.round(+v))) : d;
     Object.assign(g, {
-      idx: num(st.idx, g.idx, meta.total + 1), found: num(st.found, g.found, meta.total + 1), sesterces: num(st.sesterces, g.sesterces, 9999),
+      idx: num(st.idx, g.idx, meta.total + 1), found: num(st.found, g.found, meta.total + 1), sesterces: num(st.sesterces, g.sesterces, 9999), gloire: num(st.gloire, g.gloire || 0, 9999),
       status: ["ready", "q", "res", "final", "end"].includes(st.status) ? st.status : g.status,
       final: st.final && typeof st.final === "object" ? { step: num(st.final.step, 0, 9), score: num(st.final.score, 0, 99), text: clean(st.final.text, 900), sent: !!st.final.sent } : g.final,
       qStart: st.status === "q" ? num(st.qStart, now, now + 60000) : null, done: !!st.done,
@@ -228,7 +228,7 @@ const routes = {
     if (!g) return fail("Groupe introuvable.");
     const amount = Math.max(-100, Math.min(100, Math.round(+b.amount || 0)));
     if (!amount) return fail("Montant invalide.");
-    const a = { id: tid(), gid: g.gid, amount, reason: clean(b.reason, 80) || (amount < 0 ? "Pénalité de l'enseignant·e" : "Bonus de l'enseignant·e"), ts: Date.now() };
+    const a = { id: tid(), gid: g.gid, amount, kind: b.kind === "gloire" ? "gloire" : "sesterces", reason: clean(b.reason, 80) || (amount < 0 ? "Pénalité de l'enseignant·e" : "Bonus de l'enseignant·e"), ts: Date.now() };
     await s.setJSON(K(code).adj(g.gid, a.id), a);
     return json({ ok: true, adj: a });
   },
