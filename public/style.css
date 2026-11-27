@@ -182,6 +182,7 @@ td.n,th.n{font-family:var(--mono);text-align:right;white-space:nowrap;font-varia
 .zeus select{flex:1;width:0;min-width:0;font:inherit;font-size:15px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px}
 .zeus .btn{background:var(--gold)}
 
+.fin .opt:disabled{text-decoration:none;opacity:.55}
 /* ---------- Scènes animées des malédictions ---------- */
 .sc{position:relative;width:100%;max-width:340px;aspect-ratio:2/3;margin-inline:auto;border-radius:14px;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.45)}
 .sc-bg,.sc-dim,.sc-stone,.sc-rays,.sc-confetti{position:absolute;inset:0}

@@ -173,6 +173,24 @@ SCENES = [
   voir="les monnaies grecques du musée",
   flash=dict(q="Où plaçait-on l'obole destinée à Charon ?", ok="Dans la bouche du défunt", bad=["Dans sa main droite", "Sur sa tombe", "Dans un vase à côté de lui"])),
 ]
-out = "/* Données du jeu (générées par tools/build_data.py) */\nwindow.TG=" + json.dumps(dict(QUIZ=QUIZ, SPHINX=SPHINX, CURSES=CURSES, PROTECTIONS=PROTECTIONS, BOONS=BOONS, SCENES=SCENES), ensure_ascii=False) + ";\n"
+
+FINALE = dict(qid=29, titre="Homère chantant son Odyssée", artiste="Jean-Pierre Saint-Ours", salle="Salle 408", inv="1983-0017",
+  url="https://www.mahmah.ch/collection/oeuvres/homere-chantant-son-odyssee-lentree-dune-bourgade-de-grece/1983-0017",
+  intro="Les dieux convoquent tous les groupes devant une seule et même œuvre : le tableau de Saint-Ours où le vieil Homère chante l'Odyssée à l'entrée d'un village grec. Rendez-vous en salle 408.",
+  regarder="Avant de répondre, observez le tableau une minute en silence. Qui écoute vraiment ? Qui regarde ailleurs ? Où tombe la lumière ?",
+  mcq=[
+   dict(q="Au-dessus d'Homère se dresse le buste d'Athéna. Pourquoi le peintre a-t-il choisi cette déesse-là ?", ok="Elle protège Ulysse, le héros du chant", bad=["Elle est la déesse de la poésie", "Homère est son prêtre", "Elle punit les menteurs"],
+     expl="Dans l'Odyssée, Athéna veille sur Ulysse du début à la fin du voyage. La poésie, elle, est le domaine des Muses et d'Apollon."),
+   dict(q="Homère est aveugle et chante sans rien lire. Qu'est-ce que cela nous apprend sur la manière dont l'Odyssée a d'abord circulé ?", ok="Par la voix et la mémoire, de bouche à oreille", bad=["Dans des livres copiés par des moines", "Gravée sur des tablettes de pierre", "Peinte sur des vases"],
+     expl="Avant d'être mises par écrit, les épopées homériques ont longtemps été chantées de mémoire par des aèdes, des poètes qui allaient de ville en ville."),
+   dict(q="Le garçon qui guide le poète tient un rouleau. Que peut symboliser ce détail ?", ok="Le chant qui sera conservé grâce à l'écriture", bad=["Une carte pour retrouver Ithaque", "Le salaire du poète", "La liste des habitants du village"],
+     expl="Le rouleau (volumen) annonce le passage de la parole au texte : c'est parce qu'on l'a écrite que l'Odyssée est arrivée jusqu'à nous."),
+   dict(q="Saint-Ours, peintre genevois, peint cette scène à la fin du XVIIIe siècle. Qu'admirent alors les artistes dans la Grèce antique ?", ok="Un modèle de simplicité, de beauté et de vertu", bad=["Les fondateurs grecs de Genève", "Une civilisation qu'on venait tout juste de découvrir", "Le luxe des palais royaux"],
+     expl="Les peintres néoclassiques voient dans l'Antiquité un idéal de noblesse simple et de vertu civique. Un poète qui chante pour tout un village, sans palais ni roi, illustre bien cet idéal."),
+  ],
+  reflexion="En 2 ou 3 phrases : près de 2800 ans plus tard, pourquoi raconte-t-on encore l'histoire d'Ulysse ? Appuyez-vous sur un détail du tableau ou sur une œuvre vue pendant la chasse.",
+  minChars=120, ptsQcm=3, ptsTexte=5)
+
+out = "/* Données du jeu (générées par tools/build_data.py) */\nwindow.TG=" + json.dumps(dict(QUIZ=QUIZ, SPHINX=SPHINX, CURSES=CURSES, PROTECTIONS=PROTECTIONS, BOONS=BOONS, SCENES=SCENES, FINALE=FINALE), ensure_ascii=False) + ";\n"
 pathlib.Path(sys.argv[2]).write_text(out)
 print("ok", len(QUIZ), len(SPHINX))

@@ -1,6 +1,6 @@
 /* Thesaurus Genavensis — jeu élève (chasse au trésor + malédictions entre groupes) */
 (() => {
-const { QUIZ, SPHINX, CURSES, PROTECTIONS, BOONS, SCENES } = window.TG;
+const { QUIZ, SPHINX, CURSES, PROTECTIONS, BOONS, SCENES, FINALE } = window.TG;
 const scene = id => SCENES.find(x => x.id === id);
 const ZONES = ['cour', '113', '114', '115', '0203', '408'];
 const N = 8, DUR = 300, H1 = 90, H2 = 180, H3 = 270, LOCK = 15, SYNC_MS = 3000;
@@ -16,7 +16,7 @@ let S = ls(KEY) || { screen: 'join' };
 let B = { groups: [], meta: null, ok: true };
 const PH = {}, VID = {};
 const save = () => ls(KEY, S);
-function loadPhotos() { (S.qs || []).forEach((_, i) => { const p = ls(KEY + '-ph-' + i); if (p) PH[i] = p }) }
+function loadPhotos() { for (let i = 0; i <= N; i++) { const p = ls(KEY + '-ph-' + i); if (p) PH[i] = p } }
 loadPhotos();
 
 /* ---------- réseau ---------- */
@@ -35,9 +35,9 @@ async function sync() {
     const res = await api('sync', { ...ident(), since: S.since || '', state: {
       idx: S.i, found: S.found, sesterces: S.sesterces, status: S.screen === 'end' ? 'end' : S.screen,
       qStart: S.screen === 'q' && st ? st.t0 : null, done: S.screen === 'end', protections: S.prot, log: S.log.slice(-40),
-      qid: st ? st.id : 0, pending: Object.keys(S.pending || {}) } });
+      qid: st ? st.id : 0, pending: Object.keys(S.pending || {}), final: S.fin || null } });
     const wasStarted = !!(B.meta && B.meta.started !== false), known = !!B.meta;
-    B = { ...res, ok: true };
+    B = { ...res, ok: true, skew: res.now - Date.now() };
     if (wasStarted !== res.meta.started && S.screen === 'ready') { if (known && res.meta.started) { buzz([200, 100, 200]); toast('C\'est parti ! La chasse est ouverte.') } render() }
     for (const c of res.inbox) { if (S.applied.includes(c.id)) continue; S.applied.push(c.id); if (!S.since || c.id > S.since) S.since = c.id; incoming(c) }
     for (const a of res.adj) { if (S.adjApplied.includes(a.id)) continue; S.adjApplied.push(a.id); S.sesterces = Math.max(0, S.sesterces + a.amount); addLog('adj', `${a.amount > 0 ? '+' : ''}${a.amount} sesterces : ${a.reason}`); toast(`${a.amount > 0 ? '+' : ''}${a.amount} sesterces — ${a.reason}`) }
@@ -77,9 +77,9 @@ function addLog(kind, text) { S.log.push({ t: Date.now(), kind, text }); if (S.l
 async function join(code, name, players) {
   const res = await api('game/join', { code, name, players });
   B = { groups: [], meta: res.meta, ok: true };
-  for (let i = 0; i < N; i++) { ls(KEY + '-ph-' + i, null); delete PH[i] }
+  for (let i = 0; i <= N; i++) { ls(KEY + '-ph-' + i, null); delete PH[i] }
   const start = Math.floor(Math.random() * ZONES.length), order = ZONES.slice(start).concat(ZONES.slice(0, start));
-  const pick = shuffle(QUIZ).slice(0, N).sort((a, b) => order.indexOf(a.zone) - order.indexOf(b.zone));
+  const pick = shuffle(QUIZ.filter(q => q.id !== FINALE.qid)).slice(0, N).sort((a, b) => order.indexOf(a.zone) - order.indexOf(b.zone));
   S = { screen: 'ready', code: res.code, gid: res.gid, token: res.token, name, players, i: 0, sesterces: 10, found: 0,
     prot: { egide: 0, miroir: 0 }, pending: {}, since: '', applied: [], adjApplied: [], log: [], queue: [],
     qs: pick.map(q => ({ id: q.id, opts: shuffle([q.bonne, ...q.fausses]), wrong: [], qwrong: [], pts: null, t0: null, lockUntil: 0, elapsed: null, nophoto: false, via: null, fx: {} })) };
@@ -104,7 +104,7 @@ function submitFree() {
   st.wrong.push(v.slice(0, 40)); inp.value = ''; miss();
 }
 function pickOpt(o) { const st = cur(), q = quiz(st.id); if (Date.now() < st.lockUntil) return; if (elapsed() >= DUR) return fail(); if (o === q.bonne) return win('joker'); st.qwrong.push(o); miss() }
-function next() { S.i++; S.screen = S.i >= N ? 'end' : 'ready'; save(); render(); sync() }
+function next() { S.i++; if (S.i >= N) { S.screen = 'final'; S.fin = S.fin || { step: 0, answers: [], score: 0, text: '', sent: false } } else S.screen = 'ready'; save(); render(); sync() }
 function buzz(p) { try { navigator.vibrate && navigator.vibrate(p) } catch (e) {} }
 function role(i) { const p = S.players.filter(Boolean), r = ['lit l\'énigme', 'tient le téléphone et prend la photo', 'guette les cartels', 'surveille le chrono et le Temple']; return p.map((n, k) => `<b>${esc(n)}</b> ${r[(k + i) % p.length] || ''}`).join(' · ') }
 let toastT;
@@ -177,6 +177,7 @@ function applyCurse(type, fromName, reason, sceneId) {
     if (type === 'sphinx') { const sq = SPHINX[Math.floor(Math.random() * SPHINX.length)]; item.q = SPHINX.indexOf(sq); item.opts = shuffle([sq.ok, ...sq.bad]); item.wrong = []; item.lockUntil = 0 }
     S.queue.push(item); save(); showOverlay(); return;
   }
+  if (S.screen === 'final' && ['dedale', 'brouillard', 'tantale'].includes(type)) { addLog('recv', `${nom} (${fromName}) — sans effet pendant l'épreuve finale`); save(); return }
   if (type === 'dedale') { if (inQ) st.fx.dedaleUntil = Date.now() + 60000; else S.pending.dedale = true }
   if (type === 'brouillard') { if (inQ && elapsed() < H1) st.fx.noSalle = true; else S.pending.brouillard = true }
   if (type === 'tantale') { if (inQ && elapsed() < H3) st.fx.noJoker = true; else S.pending.tantale = true }
@@ -259,10 +260,73 @@ function tickScene(it, sc) {
   window.TGScenes.tick(sc.id, el, document.querySelector('#ov .sc'));
 }
 
+/* ---------- épreuve finale commune ---------- */
+function finalHtml() {
+  const F = FINALE, f = S.fin, head = `<div class="top"><span class="pill v">Épreuve finale</span><span class="pill">${S.found} trésor${S.found > 1 ? 's' : ''}</span><span class="pill">${S.sesterces} S</span></div><div id="boardwrap">${boardHtml()}</div>`;
+  if (f.step === 0) return `${head}
+<section class="card">
+ <div class="eyebrow">9e trésor · commun à tous les groupes</div>
+ <h2>${esc(F.titre)}</h2><p class="muted">${esc(F.artiste)} · ${esc(F.salle)}</p>
+ <p>${esc(F.intro)}</p>
+ <p class="hint">${esc(F.regarder)}</p>
+ <p class="small muted">Pendant l'épreuve finale, aucune malédiction ne peut vous atteindre.</p>
+ ${PH[N] ? `<div class="thumbrow"><img src="${PH[N]}" alt="Votre photo du tableau"><button class="link" id="fphoto">Reprendre la photo</button></div>` : `<button class="btn" id="fphoto">Photographier le tableau</button>`}
+</section>
+<button class="btn gold" id="fgo" ${PH[N] || f.nophoto ? '' : 'disabled'}>Nous sommes devant le tableau</button>
+${PH[N] || f.nophoto ? '' : `<button class="link" id="fnoph">Continuer sans photo</button>`}`;
+  if (f.step >= 1 && f.step <= F.mcq.length) {
+    const i = f.step - 1, m = F.mcq[i], opts = (f.opts = f.opts || [])[i] || (f.opts[i] = shuffle([m.ok, ...m.bad])), a = f.answers[i];
+    return `${head}
+<section class="card fin">
+ <div class="eyebrow">Comprendre · question ${f.step} sur ${F.mcq.length}</div>
+ <p style="font-size:19px;font-weight:600">${esc(m.q)}</p>
+ <div class="opts">${opts.map((o, k) => `<button class="opt" data-f="${k}" ${a != null ? 'disabled' : ''} ${a != null && o === m.ok ? 'style="border-color:var(--verd);background:rgba(108,197,143,.15);opacity:1"' : ''}${a === o && o !== m.ok ? ' style="border-color:var(--curse);opacity:1"' : ''}>${esc(o)}</button>`).join('')}</div>
+ ${a != null ? `<p style="font-weight:700;color:${a === m.ok ? 'var(--verd)' : 'var(--curse)'}">${a === m.ok ? `Juste : +${F.ptsQcm} sesterces.` : 'Pas tout à fait.'}</p><p>${esc(m.expl)}</p>` : ''}
+</section>
+${a != null ? `<button class="btn" id="fnext">${f.step < F.mcq.length ? 'Question suivante' : 'Dernière étape : réfléchir'}</button>` : ''}`;
+  }
+  if (f.step === F.mcq.length + 1) return `${head}
+<section class="card">
+ <div class="eyebrow">Réfléchir · votre réponse sera lue par Zeus</div>
+ <p style="font-size:19px;font-weight:600">${esc(F.reflexion)}</p>
+ <textarea id="ftxt" rows="6" maxlength="900" style="width:100%;font:inherit;padding:10px;border-radius:10px" placeholder="Écrivez ensemble, en phrases complètes…">${esc(f.text)}</textarea>
+ <p class="small muted" id="fcount"></p>
+</section>
+<button class="btn gold" id="fsend" disabled>Envoyer à Zeus</button>`;
+  return `${head}
+<section class="card">
+ <div class="eyebrow">Épreuve finale accomplie</div>
+ <h2>Le chant continue</h2>
+ <p>Votre réflexion est partie vers l'Olympe : Zeus peut la récompenser. Vous gagnez le 9e trésor.</p>
+ <p class="small muted">Questions justes : ${f.score / FINALE.ptsQcm} sur ${FINALE.mcq.length} · réflexion envoyée : +${FINALE.ptsTexte} sesterces.</p>
+</section>
+<button class="btn" id="fend">Voir le classement</button>`;
+}
+function bindFinal() {
+  const F = FINALE, f = S.fin, go = (fn) => () => { fn(); save(); render(); sync() };
+  const ph = $('#fphoto'); if (ph) ph.onclick = takePhoto;
+  const np = $('#fnoph'); if (np) np.onclick = () => { if (!np.dataset.c) { np.dataset.c = '1'; np.textContent = 'Confirmer : continuer sans photo (signalé à l\'enseignant·e)'; return } f.nophoto = true; save(); render() };
+  const g = $('#fgo'); if (g) g.onclick = go(() => { f.step = 1 });
+  document.querySelectorAll('[data-f]').forEach(b => b.onclick = go(() => { const i = f.step - 1, m = F.mcq[i]; if (f.answers[i] != null) return; const o = f.opts[i][+b.dataset.f]; f.answers[i] = o; if (o === m.ok) { f.score += F.ptsQcm; S.sesterces += F.ptsQcm } }));
+  const n = $('#fnext'); if (n) n.onclick = go(() => { f.step++ });
+  const t = $('#ftxt'), c = $('#fcount'), send = $('#fsend');
+  if (t) { const upd = () => { const L = t.value.trim().length; c.textContent = L < F.minChars ? `Encore ${F.minChars - L} caractères au minimum.` : `${L} caractères : prêt à envoyer.`; send.disabled = L < F.minChars; f.text = t.value; save() }; t.oninput = upd; upd() }
+  if (send) send.onclick = go(() => { if (f.sent || f.text.trim().length < F.minChars) return; f.text = f.text.trim(); f.sent = true; f.step = F.mcq.length + 2; S.sesterces += F.ptsTexte; S.found++; addLog('boon', `Épreuve finale accomplie : +${F.ptsTexte} sesterces et 9e trésor`) });
+  const e = $('#fend'); if (e) e.onclick = go(() => { S.screen = 'end' });
+}
+
 /* ---------- Temple ---------- */
 let T = { sel: null, target: null, msg: '' };
 function openTemple() { T = { sel: null, target: null, msg: '' }; $('#temple').hidden = false; drawTemple() }
 function closeTemple() { $('#temple').hidden = true; $('#temple').innerHTML = '' }
+function curseBlock(g) {
+  const now = Date.now() + (B.skew || 0), sec = t => { const n = Math.ceil((t - now) / 1000); return n >= 60 ? `${Math.floor(n / 60)} min ${String(n % 60).padStart(2, '0')}` : `${n} s` };
+  if (g.done) return 'fini'; if (g.status === 'final') return 'épreuve finale';
+  if (S.lt === g.gid) return 'maudit en dernier';
+  if (g.immUntil && g.immUntil > now) return 'protégé encore ' + sec(g.immUntil);
+  if (g.graceUntil && g.graceUntil > now) return 'libre dans ' + sec(g.graceUntil);
+  return '';
+}
 function drawTemple(soft) {
   const el = $('#temple'); if (el.hidden) return;
   if (soft && el.querySelector(':focus')) return;
@@ -278,7 +342,7 @@ function drawTemple(soft) {
       <button class="item" data-c="${k}" aria-pressed="${T.sel === k}" ${!allowed(k) || c.prix > S.sesterces ? 'disabled' : ''}>
        <span class="n">${esc(c.nom)}</span><span class="p">${c.prix} S</span><span class="d">${esc(c.desc)}</span></button>`).join('')}</div>
     ${T.sel && !T.sel.startsWith('b:') ? `<div class="eyebrow">Cible</div>
-     <div class="targets">${others.length ? others.map(g => `<button data-t="${g.gid}" aria-pressed="${T.target === g.gid}" ${g.done ? 'disabled' : ''}>${esc(g.name)}${g.done ? ' (fini)' : ''}</button>`).join('') : '<p class="muted small">Aucun autre groupe pour l\'instant.</p>'}</div>
+     <div class="targets">${others.length ? others.map(g => { const why = curseBlock(g); return `<button data-t="${g.gid}" aria-pressed="${T.target === g.gid}" ${why ? 'disabled' : ''}>${esc(g.name)}${why ? ` <span class="small">(${why})</span>` : ''}</button>` }).join('') : '<p class="muted small">Aucun autre groupe pour l\'instant.</p>'}</div>
      <button class="btn curse" id="cast" ${T.target ? '' : 'disabled'}>Lancer ${esc(CURSES[T.sel].nom)}</button>` : ''}
     ${T.msg ? `<p class="err">${esc(T.msg)}</p>` : ''}
     ${meta.boonsOn !== false ? `<div class="eyebrow">Bienfaits pour un autre groupe</div>
@@ -312,7 +376,7 @@ function drawTemple(soft) {
     try {
       await api('curse', { ...ident(), type: T.sel, target: T.target });
       const tn = (B.groups.find(g => g.gid === T.target) || {}).name || '?';
-      S.sesterces -= c.prix; addLog('sent', `${c.nom} lancée sur ${tn}`); save();
+      S.sesterces -= c.prix; S.lt = T.target; addLog('sent', `${c.nom} lancée sur ${tn}`); save();
       closeTemple(); toast(`${c.nom} lancée sur ${tn} !`, true); render(); sync();
     } catch (e) { T.msg = e.message; drawTemple() }
   };
@@ -322,9 +386,9 @@ function drawTemple(soft) {
 /* ---------- photo ---------- */
 function takePhoto() { const c = $('#cam'); c.value = ''; c.click() }
 $('#cam').addEventListener('change', e => {
-  const f = e.target.files && e.target.files[0]; if (!f || S.screen !== 'q') return;
+  const f = e.target.files && e.target.files[0]; if (!f || !['q', 'final'].includes(S.screen)) return; const slot = S.screen === 'final' ? N : S.i;
   const url = URL.createObjectURL(f), img = new Image();
-  img.onload = () => { const M = 640, r = Math.min(1, M / Math.max(img.width, img.height)), cv = document.createElement('canvas'); cv.width = Math.round(img.width * r); cv.height = Math.round(img.height * r); cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height); const d = cv.toDataURL('image/jpeg', .6); URL.revokeObjectURL(url); PH[S.i] = d; cur().nophoto = false; ls(KEY + '-ph-' + S.i, d); save(); render() };
+  img.onload = () => { const M = 640, r = Math.min(1, M / Math.max(img.width, img.height)), cv = document.createElement('canvas'); cv.width = Math.round(img.width * r); cv.height = Math.round(img.height * r); cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height); const d = cv.toDataURL('image/jpeg', .6); URL.revokeObjectURL(url); PH[slot] = d; if (slot === N) S.fin.photo = true; else cur().nophoto = false; ls(KEY + '-ph-' + slot, d); save(); render() };
   img.onerror = () => { URL.revokeObjectURL(url); toast('Photo illisible, recommencez.') };
   img.src = url;
 });
@@ -351,8 +415,8 @@ ${S.pending && S.pending.apollon ? '<p class="small" style="color:var(--verd)">F
 function render() {
   const a = $('#app'); lastLv = null; lastDed = null;
   if (B.gone && S.gid) { a.innerHTML = `<section class="card"><h2>Partie fermée</h2><p>${esc(B.gone)}</p><button class="btn ghost" id="leave">Revenir à l'accueil</button></section>`; $('#leave').onclick = () => { S = { screen: 'join' }; B = { groups: [], ok: true }; save(); render() }; return }
-  a.innerHTML = S.screen === 'join' ? joinHtml() : S.screen === 'ready' ? readyHtml() : S.screen === 'q' ? qHtml() : S.screen === 'res' ? resHtml() : endHtml();
-  bind(); if (S.screen === 'q') updateQ(true);
+  a.innerHTML = S.screen === 'join' ? joinHtml() : S.screen === 'ready' ? readyHtml() : S.screen === 'q' ? qHtml() : S.screen === 'res' ? resHtml() : S.screen === 'final' ? finalHtml() : endHtml();
+  bind(); if (S.screen === 'final') bindFinal(); if (S.screen === 'q') updateQ(true);
   window.scrollTo({ top: 0 });
 }
 function joinHtml() {
@@ -382,7 +446,8 @@ function joinHtml() {
   <li>Chaque objet trouvé rapporte des <b>sesterces</b> : 10 sans indice, puis 8, 6 ou 2. Chaque erreur coûte 2 sesterces et bloque 15 secondes.</li>
   <li>Au <b>Temple</b>, dépensez vos sesterces en malédictions contre les autres groupes, en protections, ou en bienfaits pour aider un groupe allié.</li>
   <li><b>Zeus</b> (votre enseignant·e) surveille tout depuis l'Olympe : sa foudre ignore toutes les protections.</li>
-  <li>Un groupe maudit est protégé par les dieux jusqu'à la fin de son énigme suivante. On ne maudit pas deux fois de suite le même groupe, ni un groupe qui commence son énigme depuis moins d'une minute.</li>
+  <li>Un groupe maudit est protégé un moment par les dieux : 3 minutes au début de la chasse, de moins en moins à mesure qu'il avance, 1 minute seulement à la fin. Un groupe qui vient d'ouvrir une énigme est aussi épargné quelques secondes. On ne maudit pas deux fois de suite le même groupe. Le Temple indique qui est protégé, et pour combien de temps.</li>
+  <li>Après la 8e énigme, tous les groupes se retrouvent devant la même œuvre pour l'<b>épreuve finale</b> : observation et réflexion, sans malédictions.</li>
   <li>Au musée : on marche, on parle bas, on ne touche à rien. Courir coûte des sesterces.</li>
  </ul>
 </section>`;
@@ -491,7 +556,7 @@ function endHtml() {
   return `
 <section class="card">
  <div class="eyebrow">${esc(S.name)}</div>
- <div class="big-n">${S.found}<span style="font-size:22px"> trésor${S.found > 1 ? 's' : ''} sur ${N}</span></div>
+ <div class="big-n">${S.found}<span style="font-size:22px"> trésor${S.found > 1 ? 's' : ''} sur ${N + 1}</span></div>
  <p><b>${S.sesterces}</b> sesterces en poche · ${sent} malédiction${sent > 1 ? 's' : ''} lancée${sent > 1 ? 's' : ''} · ${recv} reçue${recv > 1 ? 's' : ''} · ${gave} bienfait${gave > 1 ? 's' : ''} offert${gave > 1 ? 's' : ''}</p>
  ${rank ? `<div class="titre">${rank === 1 ? 'Imperator' : rank === 2 ? 'Legatus' : rank === 3 ? 'Centurio' : 'Miles'}</div><p class="muted">${rank}${rank === 1 ? 'er' : 'e'} sur ${gs.length} groupes pour l'instant.</p>` : ''}
 </section>
@@ -499,7 +564,7 @@ function endHtml() {
  ${gs.map((g, i) => `<tr${g.gid === S.gid ? ' style="font-weight:700"' : ''}><td>${i + 1}</td><td>${esc(g.name)}${g.done ? '' : ' <span class="muted small">(en cours)</span>'}</td><td class="n">${g.found}</td><td class="n">${g.sesterces}</td></tr>`).join('')}
  </tbody></table></div></section>
 <section class="card"><h2>Votre butin</h2>
- <div class="loot">${S.qs.map((st, i) => { const q = quiz(st.id); return `<figure>${PH[i] ? `<img src="${PH[i]}" alt="${esc(q.titre)}">` : `<div class="nophoto">Pas de photo</div>`}<figcaption><span>${esc(q.titre)}</span><b>${st.pts ? '+' + st.pts : '—'}</b></figcaption></figure>` }).join('')}</div>
+ <div class="loot">${S.qs.map((st, i) => { const q = quiz(st.id); return `<figure>${PH[i] ? `<img src="${PH[i]}" alt="${esc(q.titre)}">` : `<div class="nophoto">Pas de photo</div>`}<figcaption><span>${esc(q.titre)}</span><b>${st.pts ? '+' + st.pts : '—'}</b></figcaption></figure>` }).join('')}${S.fin && S.fin.sent ? `<figure>${PH[N] ? `<img src="${PH[N]}" alt="${esc(FINALE.titre)}">` : `<div class="nophoto">Pas de photo</div>`}<figcaption><span>Finale : ${esc(FINALE.titre)}</span><b>+${S.fin.score + FINALE.ptsTexte}</b></figcaption></figure>` : ''}</div>
 </section>
 <section class="card"><h2>Chronique des malédictions et bienfaits</h2>
  ${S.log.length ? `<div class="feed">${S.log.slice().reverse().map(l => `<div><span class="muted small">${new Date(l.t).toLocaleTimeString('fr-CH', { hour: '2-digit', minute: '2-digit' })}</span> ${esc(l.text)}</div>`).join('')}</div>` : '<p class="muted">Aucune malédiction. Une chasse bien paisible !</p>'}

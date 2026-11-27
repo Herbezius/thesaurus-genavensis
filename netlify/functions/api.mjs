@@ -6,7 +6,11 @@ const BOONS = { don5: 5, don10: 10, egide: 15, apollon: 8 };
 const ZEUS_BOONS = ["don5", "don10", "egide", "miroir", "apollon"];
 const MAX_GROUPS = 8;
 const ONLINE_MS = 20000;
-const FIRST_MINUTE_MS = 60000;
+// Immunités dégressives : plus un groupe avance, plus elles raccourcissent.
+// idx = numéro de l'énigme en cours (0 à 7). Protection après une malédiction : 3 min au début, 1 min à la fin.
+// Délai de grâce au début d'une énigme : 45 s au début, 15 s à la fin.
+const immMs = idx => Math.max(60, 180 - 20 * (idx || 0)) * 1000;
+const graceMs = idx => Math.max(15, 45 - 5 * (idx || 0)) * 1000;
 const ALPHA = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 
 const json = (data, status = 200) =>
@@ -34,10 +38,14 @@ async function getAll(s, prefix, filter) {
   const vals = await Promise.all(keys.map(k => s.get(k)));
   return vals.map((v, i) => v && { ...v, _key: keys[i] }).filter(Boolean);
 }
-function publicGroup(g, now) {
+function publicGroup(g, now, imm) {
+  const im = imm && imm[g.gid];
   return { gid: g.gid, name: g.name, players: g.players, idx: g.idx, total: g.total, found: g.found, sesterces: g.sesterces,
-    status: g.status, done: !!g.done, online: now - (g.updated || 0) < ONLINE_MS, protections: g.protections || {} };
+    status: g.status, done: !!g.done, online: now - (g.updated || 0) < ONLINE_MS, protections: g.protections || {},
+    immUntil: im && im.until > now ? im.until : null,
+    graceUntil: g.status === "q" && g.qStart && g.qStart + graceMs(g.idx) > now ? g.qStart + graceMs(g.idx) : null };
 }
+async function immMap(s, code) { const out = {}; for (const x of await getAll(s, `g/${code}/imm/`)) out[x._key.split("/").pop()] = x; return out }
 function publicMeta(m) { return { code: m.code, started: m.started !== false, startedAt: m.startedAt || null, cursesOn: m.cursesOn, boonsOn: m.boonsOn !== false, disabled: m.disabled || [], ended: !!m.ended, total: m.total }; }
 
 async function loadGame(s, code) {
@@ -92,8 +100,9 @@ const routes = {
     const { meta, code, g } = ctx, k = K(code), now = Date.now(), st = b.state || {};
     const num = (v, d, max) => Number.isFinite(+v) ? Math.max(0, Math.min(max, Math.round(+v))) : d;
     Object.assign(g, {
-      idx: num(st.idx, g.idx, meta.total), found: num(st.found, g.found, meta.total), sesterces: num(st.sesterces, g.sesterces, 9999),
-      status: ["ready", "q", "res", "end"].includes(st.status) ? st.status : g.status,
+      idx: num(st.idx, g.idx, meta.total + 1), found: num(st.found, g.found, meta.total + 1), sesterces: num(st.sesterces, g.sesterces, 9999),
+      status: ["ready", "q", "res", "final", "end"].includes(st.status) ? st.status : g.status,
+      final: st.final && typeof st.final === "object" ? { step: num(st.final.step, 0, 9), score: num(st.final.score, 0, 99), text: clean(st.final.text, 900), sent: !!st.final.sent } : g.final,
       qStart: st.status === "q" ? num(st.qStart, now, now + 60000) : null, done: !!st.done,
       protections: { egide: num(st.protections?.egide, 0, 1), miroir: num(st.protections?.miroir, 0, 1) },
       qid: num(st.qid, 0, 999), pending: Array.isArray(st.pending) ? st.pending.filter(x => typeof x === "string").slice(0, 6) : [],
@@ -101,12 +110,13 @@ const routes = {
     });
     await s.setJSON(k.grp(g.gid), g);
     const since = clean(b.since, 40);
-    const [groups, inbox, adj] = await Promise.all([
+    const [groups, inbox, adj, imm] = await Promise.all([
       getAll(s, k.grpPrefix),
       getAll(s, k.cursePrefix(g.gid), key => key.split("/").pop() > since),
       getAll(s, k.adjPrefix(g.gid)),
+      immMap(s, code),
     ]);
-    return json({ meta: publicMeta(meta), now, groups: groups.map(x => publicGroup(x, now)),
+    return json({ meta: publicMeta(meta), now, groups: groups.map(x => publicGroup(x, now, imm)),
       inbox: inbox.map(({ _key, ...c }) => c).sort((a, b) => a.id < b.id ? -1 : 1),
       adj: adj.map(({ _key, ...a }) => a) });
   },
@@ -138,17 +148,18 @@ const routes = {
     if (target.done) return fail(`${target.name} a déjà terminé la chasse.`);
     const lt = await s.get(k.lt(g.gid));
     if (lt && lt.target === target.gid) return fail(`Vous avez maudit ${target.name} en dernier : choisissez une autre cible.`);
+    if (target.status === "final") return fail(`${target.name} affronte l'épreuve finale : les dieux le laissent réfléchir en paix.`);
     const imm = await s.get(k.imm(target.gid));
-    if (imm && target.idx <= imm.through) return fail(`${target.name} est protégé par les dieux jusqu'à la fin de son énigme n° ${imm.through + 1}.`);
-    if (target.status === "q" && target.qStart && now - target.qStart < FIRST_MINUTE_MS) {
-      const wait = Math.ceil((FIRST_MINUTE_MS - (now - target.qStart)) / 1000);
+    if (imm && imm.until > now) return fail(`${target.name} est protégé par les dieux encore ${Math.ceil((imm.until - now) / 1000)} s.`);
+    if (target.status === "q" && target.qStart && now - target.qStart < graceMs(target.idx)) {
+      const wait = Math.ceil((graceMs(target.idx) - (now - target.qStart)) / 1000);
       return fail(`${target.name} vient de commencer son énigme : patientez encore ${wait} s.`);
     }
     const c = { ...base, type };
     await Promise.all([
       s.setJSON(k.curse(target.gid, c.id), c),
       s.setJSON(k.lt(g.gid), { target: target.gid, ts: now }),
-      s.setJSON(k.imm(target.gid), { through: ["q", "res"].includes(target.status) ? target.idx + 1 : target.idx, ts: now }),
+      s.setJSON(k.imm(target.gid), { until: now + immMs(target.idx), ts: now }),
     ]);
     return json({ ok: true, curse: c });
   },
@@ -186,9 +197,9 @@ const routes = {
   async "prof/board"(s, b) {
     const [ctx, err] = await authProf(s, b); if (err) return err;
     const { meta, code } = ctx, k = K(code), now = Date.now();
-    const [groups, curses, adj] = await Promise.all([getAll(s, k.grpPrefix), getAll(s, k.cursePrefix()), getAll(s, `g/${code}/adj/`)]);
+    const [groups, curses, adj, imm] = await Promise.all([getAll(s, k.grpPrefix), getAll(s, k.cursePrefix()), getAll(s, `g/${code}/adj/`), immMap(s, code)]);
     return json({ meta: publicMeta(meta), now,
-      groups: groups.map(g => ({ ...publicGroup(g, now), log: g.log || [], qid: g.qid, qStart: g.qStart, pending: g.pending || [] })),
+      groups: groups.map(g => ({ ...publicGroup(g, now, imm), log: g.log || [], qid: g.qid, qStart: g.qStart, pending: g.pending || [], final: g.final || null })),
       curses: curses.map(({ _key, ...c }) => c).sort((a, b) => a.id < b.id ? 1 : -1).slice(0, 80),
       adj: adj.map(({ _key, ...a }) => a) });
   },
