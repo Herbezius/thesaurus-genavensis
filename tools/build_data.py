@@ -82,11 +82,12 @@ SPHINX = [
 SPHINX = [dict(q=q, ok=ok, bad=bad) for q, ok, bad in SPHINX]
 
 CURSES = {
- "meduse": dict(nom="Regard de Méduse", prix=10, court="Pétrifié 20 s", desc="Le groupe visé est pétrifié : une vidéo impassable de 20 secondes, pendant que son chrono continue.", video="videos/meduse.mp4"),
+ "meduse": dict(nom="Regard de Méduse", prix=10, court="Pétrifié 20 s", desc="Méduse fixe le groupe visé : il est pétrifié pendant une scène impassable de 20 secondes, pendant que son chrono continue."),
  "sphinx": dict(nom="Énigme du Sphinx", prix=15, court="Bloqué par le Sphinx", desc="Le Sphinx barre la route : le groupe visé doit répondre juste à une question de mythologie ou de latin. Chaque erreur le bloque 10 secondes.", video="videos/sphinx.mp4"),
  "dedale": dict(nom="Labyrinthe de Dédale", prix=12, court="Énigme brouillée", desc="Les mots de l'énigme du groupe visé sont mélangés pendant 60 secondes."),
  "brouillard": dict(nom="Brouillard des Enfers", prix=15, court="Pas d'indice de salle", desc="Le groupe visé ne reçoit pas l'indice « salle » de son énigme."),
  "tantale": dict(nom="Supplice de Tantale", prix=10, court="Pas de joker", desc="Le joker à choix multiples n'apparaît pas pour le groupe visé : réponse tapée obligatoire."),
+ "colere": dict(nom="Colère des dieux", prix=10, court="Scène divine impassable", desc="Une scène des dieux, drôle et instructive, de 15 à 25 secondes, tirée au hasard. Impossible à passer : le chrono du groupe visé continue."),
  "pandore": dict(nom="Boîte de Pandore", prix=6, court="Surprise", desc="Une malédiction tirée au hasard… ou parfois un cadeau pour le groupe visé !", video="videos/pandore.mp4"),
 }
 PROTECTIONS = {
@@ -99,6 +100,43 @@ BOONS = {
  "egide": dict(nom="Égide offerte", prix=15, desc="Le groupe choisi reçoit une Égide d'Athéna, qui annule sa prochaine malédiction."),
  "apollon": dict(nom="Faveur d'Apollon", prix=8, desc="Révèle tout de suite la salle de l'énigme du groupe choisi, même sous le Brouillard des Enfers."),
 }
-out = "/* Données du jeu (générées par tools/build_data.py) */\nwindow.TG=" + json.dumps(dict(QUIZ=QUIZ, SPHINX=SPHINX, CURSES=CURSES, PROTECTIONS=PROTECTIONS, BOONS=BOONS), ensure_ascii=False) + ";\n"
+SCENES = [
+ dict(id="meduse", nom="Regard de Méduse", dur=20, video="videos/scene-meduse.mp4",
+  captions=[[0, "Regardez-moi bien dans les yeux…"], [7, "Trop tard."], [14, "Oh non, pas le bouclier !"], [17, "…"]],
+  fact="Méduse était la seule mortelle des trois Gorgones. Persée l'a vaincue sans la regarder, en se guidant grâce au reflet de son bouclier. Athéna a ensuite fixé sa tête sur son égide.",
+  voir="l'égide d'Athéna sur la bague étrusque, salle 114",
+  flash=dict(q="Comment Persée a-t-il évité le regard de Méduse ?", ok="En regardant son reflet dans un bouclier", bad=["En se bandant les yeux", "En l'attaquant pendant la nuit", "En portant un casque à visière"])),
+ dict(id="zeus", nom="Les métamorphoses de Zeus", dur=24, video="videos/scene-zeus.mp4",
+  captions=[[0, "Venez voir mes photos de vacances !"], [6, "Ici, j'étais un cygne…"], [9, "Là, un taureau !"], [13, "Une pluie d'or…"], [16, "…et un aigle, magnifique !"], [19, "Ne partez pas, il m'en reste trois cents !"]],
+  fact="Zeus change de forme pour approcher ceux qu'il convoite : un cygne pour Léda, un taureau pour enlever Europe, une pluie d'or pour Danaé, un aigle pour emporter Ganymède. Le continent européen porte le nom de la princesse Europe.",
+  voir="Léda et le cygne, sur une coupe (salle 114) et en ivoire par Pradier (salle 408)",
+  flash=dict(q="Quel continent porte le nom d'une princesse enlevée par Zeus ?", ok="L'Europe", bad=["L'Asie", "L'Afrique", "L'Océanie"])),
+ dict(id="controle", nom="Contrôle à la porte de Genava", dur=20, video="videos/scene-controle.mp4",
+  captions=[[0, "Ave ! Contrôle à la porte de Genava."], [4, "Praenomen ?"], [7, "Nomen ?"], [10, "Cognomen ?"], [13, "Pas de cognomen ? Hmm…"], [16, "Retournez au bout de la file !"]],
+  fact="Un citoyen romain porte trois noms (tria nomina) : le prénom (praenomen), le nom de famille (nomen) et le surnom (cognomen). César décrit Genava comme « la dernière ville des Allobroges, la plus proche du territoire des Helvètes ».",
+  voir="l'inscription de Quintus Decius Alpinus, dans la cour",
+  flash=dict(q="Dans « Quintus Decius Alpinus », quel est le cognomen ?", ok="Alpinus", bad=["Quintus", "Decius", "Il n'en a pas"])),
+ dict(id="appia", nom="Bouchons sur la Via Appia", dur=20, video="videos/scene-appia.mp4",
+  captions=[[0, "Via Appia, heure de pointe…"], [5, "Ça n'avance plus."], [9, "La faute à qui ? À l'âne."], [13, "Il refuse de bouger."], [16, "Prochaine borne : encore un mille…"]],
+  fact="La Via Appia, ouverte en 312 av. J.-C. par Appius Claudius, relie Rome au sud de l'Italie. Les routes romaines étaient jalonnées de bornes milliaires : un mille, soit mille doubles pas, mesure environ 1,5 km.",
+  voir="la borne milliaire d'Élagabal, dans la cour",
+  flash=dict(q="Combien mesure environ un mille romain ?", ok="1,5 km", bad=["1 km", "500 m", "5 km"])),
+ dict(id="sisyphe", nom="Le supplice de Sisyphe", dur=20, video="videos/scene-sisyphe.mp4",
+  captions=[[0, "Chargement de votre énigme…"], [6, "Encore un effort…"], [11, "Presque…"], [14, "99 %…"], [16, "Oh non. Pas encore."]],
+  fact="Sisyphe, roi de Corinthe, a trompé les dieux et même la Mort. Aux Enfers, il est condamné à pousser un rocher en haut d'une colline, qui retombe toujours avant le sommet. D'où l'expression « un travail de Sisyphe ».",
+  voir=None,
+  flash=dict(q="Que veut dire « un travail de Sisyphe » ?", ok="Une tâche sans fin, toujours à recommencer", bad=["Un travail très bien payé", "Un travail fait en secret", "Un travail réservé aux rois"])),
+ dict(id="cresus", nom="Le trésor de Crésus", dur=18, video="videos/scene-cresus.mp4",
+  captions=[[0, "Le trésor de Crésus…"], [4, "Le roi le plus riche du monde antique…"], [8, "Et dans son coffre…"], [11, "…une mite."], [14, "Elle aussi trouve que vous perdez votre temps."]],
+  fact="Crésus régnait sur la Lydie (actuelle Turquie) au VIe siècle av. J.-C. Sa richesse était légendaire, d'où « riche comme Crésus ». La Lydie a frappé parmi les toutes premières monnaies, en électrum, un mélange naturel d'or et d'argent.",
+  voir="les monnaies antiques du musée",
+  flash=dict(q="En quel métal la Lydie frappait-elle ses premières monnaies ?", ok="L'électrum, mélange d'or et d'argent", bad=["Le bronze", "Le fer", "Le plomb"])),
+ dict(id="hermes", nom="La farce d'Hermès", dur=16, video="videos/scene-hermes.mp4",
+  captions=[[0, "Félicitations !"], [3, "Vous avez gagné un cadeau des dieux !"], [7, "Et c'est…"], [9, "…du temps perdu !"], [12, "Et merci pour les sandales !"]],
+  fact="Hermès est le messager des dieux et le protecteur des voyageurs, des marchands… et des voleurs. Le jour de sa naissance, il vole les vaches d'Apollon et invente la lyre avec une carapace de tortue.",
+  voir=None,
+  flash=dict(q="Avec quoi Hermès bébé fabrique-t-il la première lyre ?", ok="Une carapace de tortue", bad=["Une corne de bélier", "Une coquille d'escargot", "Un bouclier de bronze"])),
+]
+out = "/* Données du jeu (générées par tools/build_data.py) */\nwindow.TG=" + json.dumps(dict(QUIZ=QUIZ, SPHINX=SPHINX, CURSES=CURSES, PROTECTIONS=PROTECTIONS, BOONS=BOONS, SCENES=SCENES), ensure_ascii=False) + ";\n"
 pathlib.Path(sys.argv[2]).write_text(out)
 print("ok", len(QUIZ), len(SPHINX))

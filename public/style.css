@@ -119,12 +119,13 @@ ul.rules{margin:0;padding-left:20px;display:grid;gap:4px}
 .badge{font-size:13px;border-radius:6px;padding:2px 8px;background:var(--verd-soft);color:var(--verd)}
 
 /* superpositions de malédiction */
-.overlay{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:calc(16px + env(safe-area-inset-top,0px)) 16px calc(16px + env(safe-area-inset-bottom,0px));background:rgba(15,10,18,.92);color:#f3eef2;overflow:auto}
-.ov{width:100%;max-width:520px;display:grid;gap:14px;text-align:center}
+.overlay{position:fixed;inset:0;z-index:50;display:flex;padding:calc(16px + env(safe-area-inset-top,0px)) 16px calc(16px + env(safe-area-inset-bottom,0px));background:#140e18;color:#f3eef2;overflow:auto}
+.ov{width:100%;max-width:520px;margin:auto;display:grid;gap:14px;text-align:center}
 .ov h2{font-size:28px;color:#f0c9e6}
 .ov .cd{font-family:var(--mono);font-size:44px}
 .ov video{width:100%;max-height:60vh;aspect-ratio:2/3;object-fit:contain;background:#000;border-radius:12px}
 .ov .opts .opt{background:#2a2230;color:#f3eef2;border-color:#4b3d52}
+.ov .opt:disabled{text-decoration:none;opacity:.55}.ov .opt.good:disabled{opacity:1}
 .ov .lock{color:#ffb4ab}
 .stone{height:min(50vh,360px);border-radius:12px;background:repeating-linear-gradient(115deg,#7f8179 0 12px,#9a9c94 12px 26px,#6f716a 26px 34px);display:grid;place-items:center;font-family:var(--display);font-size:30px;color:#2b2d28;animation:petrify 20s linear forwards}
 @keyframes petrify{from{filter:saturate(1) brightness(1.2)}to{filter:saturate(0) brightness(.75)}}
@@ -180,3 +181,116 @@ td.n,th.n{font-family:var(--mono);text-align:right;white-space:nowrap;font-varia
 .gcard>*{min-width:0}
 .zeus select{flex:1;width:0;min-width:0;font:inherit;font-size:15px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px}
 .zeus .btn{background:var(--gold)}
+
+/* ---------- Scènes animées des malédictions ---------- */
+.sc{position:relative;width:100%;max-width:340px;aspect-ratio:2/3;margin-inline:auto;border-radius:14px;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.45)}
+.sc-bg,.sc-dim,.sc-stone,.sc-rays,.sc-confetti{position:absolute;inset:0}
+.sc-svg{position:absolute;inset:0;width:100%;height:100%}
+.sc [class]{transform-box:fill-box}
+.sc *{--dl:calc(var(--d,0s) - var(--el,0s))}
+.sc-cap{min-height:3.2em;font-size:21px;line-height:1.3;font-weight:700;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.6);display:grid;place-items:center;text-wrap:balance}
+.sc-video{width:100%;max-width:340px;aspect-ratio:2/3;object-fit:cover;border-radius:14px;margin-inline:auto;display:block;background:#000}
+.sc-meta{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;color:#e6dcef}
+.sc-meta .cd{font-size:28px;white-space:nowrap;flex:none}
+.sc-meta>span:first-child{text-align:left}
+.fact{background:#2a2230;border:1px solid #5b4a66;border-radius:12px;padding:14px;text-align:left;display:grid;gap:8px}
+.fact h3{color:#ffd27a;font-size:20px}
+.fact .voir{font-size:14px;color:#d9c8e6}
+/* Méduse */
+.sc-snake{transform-origin:50% 100%;animation:snake 1.3s ease-in-out infinite alternate;animation-delay:calc(var(--i) * -.22s)}
+@keyframes snake{from{transform:rotate(-9deg)}to{transform:rotate(9deg)}}
+.sc-medusa{transform-origin:50% 60%;animation:medIn 1s ease-out var(--dl) both,medStone 1.2s ease-in calc(16.5s - var(--el)) both}
+@keyframes medIn{from{transform:scale(.6) rotate(-8deg);opacity:0}to{transform:none;opacity:1}}
+@keyframes medStone{to{filter:grayscale(1) brightness(.8) contrast(.9)}}
+.sc-eye{animation:eyeGlow .5s ease-out var(--dl) both}
+@keyframes eyeGlow{from{fill:#fff}to{fill:#7dff6a}}
+@property --hole{syntax:'<percentage>';inherits:false;initial-value:90%}
+.sc-stone{pointer-events:none;background:radial-gradient(circle at 30% 20%,#a2a49c 0 3%,transparent 4%) 0 0/37px 41px,radial-gradient(circle at 70% 60%,#7c7e77 0 2.5%,transparent 3.5%) 0 0/29px 33px,linear-gradient(135deg,#9a9c94,#7e8079 60%,#8e9089);
+  -webkit-mask:radial-gradient(circle at 50% 48%,transparent var(--hole),#000 calc(var(--hole) + 9%));mask:radial-gradient(circle at 50% 48%,transparent var(--hole),#000 calc(var(--hole) + 9%));animation:stone 7.5s ease-in var(--dl) both}
+@keyframes stone{0%{--hole:90%;opacity:1}70%{--hole:-10%;opacity:1}86%{--hole:-10%;opacity:1}100%{--hole:-10%;opacity:0}}
+.sc-cracks{opacity:0;animation:cracks 3.5s linear var(--dl) both}
+@keyframes cracks{0%{opacity:0}15%{opacity:1}75%{opacity:1}100%{opacity:0}}
+.sc-shield{opacity:0;animation:shieldIn 1.1s cubic-bezier(.2,.8,.3,1.2) var(--dl) both}
+@keyframes shieldIn{from{transform:translateX(130px) rotate(50deg);opacity:0}to{transform:none;opacity:1}}
+.stoned .sc-snake{animation-play-state:paused}
+/* Zeus */
+.sc-dim{background:rgba(18,28,48,.42);animation:fadeIn .8s ease var(--dl) both}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.sc-slide{opacity:0;transform-origin:50% 50%;animation:slideShow var(--len) linear var(--dl) both}
+@keyframes slideShow{0%{opacity:0;transform:scale(.85)}10%{opacity:1;transform:scale(1)}90%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1.05)}}
+.sc-rain{animation:rain 1s linear infinite;animation-delay:calc(var(--i) * -.2s)}
+@keyframes rain{from{transform:translateY(0);opacity:1}to{transform:translateY(46px);opacity:0}}
+.sc-zeus{transform-origin:50% 100%;animation:bob 1.6s ease-in-out infinite alternate}
+.sc-mouth{transform-origin:50% 0%;animation:talk .22s ease-in-out infinite alternate}
+@keyframes talk{from{transform:scaleY(.4)}to{transform:scaleY(1.4)}}
+.sc-arm{transform-origin:50% 100%;animation:click 3s ease-in-out calc(6s - var(--el)) infinite both}
+@keyframes click{0%,100%{transform:none}8%{transform:rotate(-10deg)}16%{transform:none}}
+.sc-beam{opacity:0;animation:beam 1s ease var(--dl) both}
+@keyframes beam{to{opacity:.35}}
+@keyframes bob{from{transform:translateY(0)}to{transform:translateY(-5px)}}
+.sc-scrolls{transform-origin:100% 100%;animation:scrollsIn .7s ease-out var(--dl) both,scrollsFall 1.1s ease-in calc(var(--d) + 3s - var(--el)) both}
+@keyframes scrollsIn{from{transform:translateY(120px);opacity:0}to{transform:none;opacity:1}}
+@keyframes scrollsFall{from{transform:rotate(0)}to{transform:rotate(-62deg) translateX(-30px)}}
+/* Contrôle */
+.sc-legio{transform-origin:40% 100%;animation:lean 3s ease-out calc(4s - var(--el)) 3 both}
+@keyframes lean{0%,100%{transform:none}8%{transform:scale(1.07) translateY(-4px)}22%{transform:none}}
+.sc-crest{transform-origin:50% 100%;animation:snake 1s ease-in-out infinite alternate}
+.sc-q{opacity:0;transform-origin:50% 100%;animation:qpop 2.6s ease-out var(--dl) both}
+@keyframes qpop{0%{opacity:0;transform:scale(.3)}12%{opacity:1;transform:scale(1.15)}22%{transform:scale(1)}80%{opacity:1}100%{opacity:0}}
+.sc-brows{animation:squint .6s ease-out var(--dl) both}@keyframes squint{to{transform:translateY(2.5px)}}
+.sc-eyes{transform-origin:50% 50%;animation:narrow .6s ease-out var(--dl) both}@keyframes narrow{to{transform:scaleY(.45)}}
+.sc-tabarm{transform-origin:0% 0%;animation:point .7s ease-out var(--dl) both}@keyframes point{to{transform:rotate(-38deg)}}
+.sc-queue{opacity:0;animation:queue 1.2s ease-out var(--dl) both}@keyframes queue{from{opacity:0;transform:translateX(30px)}to{opacity:1;transform:none}}
+/* Via Appia */
+.sc-dusk{background:linear-gradient(#5a3a5a,#c86a4a 55%,transparent 56%);opacity:0;animation:dusk 20s linear calc(0s - var(--el)) both}
+@keyframes dusk{to{opacity:.55}}
+.sc-sun{animation:sun 20s linear calc(0s - var(--el)) both}@keyframes sun{to{transform:translateY(80px);fill:#ffb070}}
+.sc-cartA{animation:inch 2.4s ease-in-out infinite alternate}.sc-cartB{animation:inch 2.4s ease-in-out -1.2s infinite alternate}
+@keyframes inch{from{transform:translateX(0)}to{transform:translateX(4px)}}
+.sc-wheel{transform-origin:50% 50%;animation:wheel 2.4s ease-in-out infinite alternate}
+@keyframes wheel{from{transform:rotate(0)}to{transform:rotate(40deg)}}
+.sc-fist{transform-origin:0% 100%;animation:fist .35s ease-in-out var(--dl) infinite alternate both}@keyframes fist{from{transform:rotate(-12deg)}to{transform:rotate(14deg)}}
+.sc-donkey{animation:sitdown .8s ease-out var(--dl) both}@keyframes sitdown{to{transform:translateY(8px)}}
+.sc-dlegs{transform-origin:50% 0%;animation:fold .8s ease-out var(--dl) both}@keyframes fold{to{transform:scaleY(.45)}}
+.sc-dhead{transform-origin:0% 100%;animation:nope .45s ease-in-out var(--dl) infinite alternate both}
+@keyframes nope{from{transform:rotate(-12deg)}to{transform:rotate(12deg)}}
+.sc-puff{opacity:0;animation:puff 1.6s ease-out var(--dl) infinite both}@keyframes puff{0%{opacity:0;transform:translateY(0) scale(.6)}25%{opacity:.95}100%{opacity:0;transform:translateY(-26px) scale(1.2)}}
+.sc-honk{animation:blink .45s steps(2) var(--dl) infinite both}@keyframes blink{0%{opacity:0}100%{opacity:1}}
+.sc-bird{animation:hop 1.8s ease-in-out infinite}@keyframes hop{0%,70%,100%{transform:none}80%{transform:translateY(-5px)}}
+/* Sisyphe */
+.sc-legs{transform-origin:50% 0%;animation:walk .5s ease-in-out infinite alternate}@keyframes walk{from{transform:skewX(12deg)}to{transform:skewX(-12deg)}}
+.done .sc-legs{animation:none}
+.sc-dust{opacity:0;animation:dust 2s ease-out var(--dl) both}@keyframes dust{0%{opacity:0;transform:scale(.4)}20%{opacity:.9}100%{opacity:0;transform:scale(1.8) translateY(-10px)}}
+/* Crésus */
+.sc-rays{background:repeating-conic-gradient(from 0deg at 42% 62%,rgba(255,214,110,.5) 0 8deg,transparent 8deg 22deg);opacity:0;animation:rays 8s ease-in-out var(--dl) both,spin 14s linear infinite}
+@keyframes rays{0%{opacity:0}12%{opacity:.9}25%{opacity:.5}40%{opacity:1}55%{opacity:.6}70%{opacity:1}85%{opacity:1}100%{opacity:0}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.sc-twinkle{opacity:0;transform-origin:50% 50%;animation:twinkle 1.4s ease-in-out var(--dl) 4 both}@keyframes twinkle{0%,100%{opacity:0;transform:scale(.3)}50%{opacity:1;transform:scale(1)}}
+.sc-lid{transform-origin:0% 100%;animation:lid 1.4s cubic-bezier(.3,1.5,.5,1) var(--dl) both}
+@keyframes lid{from{transform:none}to{transform:rotate(-34deg) translate(-4px,-10px)}}
+.sc-puffd{opacity:0;animation:dust 1.8s ease-out var(--dl) both}
+.sc-moth{opacity:0;animation:moth 6s ease-out var(--dl) both}
+@keyframes moth{0%{opacity:0;transform:translate(0,0)}8%{opacity:1}30%{transform:translate(-18px,-50px)}55%{transform:translate(20px,-90px)}80%{transform:translate(-10px,-130px)}100%{opacity:1;transform:translate(25px,-160px)}}
+.sc-wing{transform-origin:50% 50%;animation:flap .18s linear infinite alternate}@keyframes flap{from{transform:scaleY(1)}to{transform:scaleY(.35)}}
+.sc-king{transform-origin:50% 100%;animation:bob 1.4s ease-in-out infinite alternate}
+.sc-karm{transform-origin:100% 100%;animation:present 1.4s ease-in-out infinite alternate}@keyframes present{from{transform:rotate(-6deg)}to{transform:rotate(6deg)}}
+.sad .sc-karm{animation:none;transform:rotate(-40deg)}
+/* Hermès */
+.sc-confetti{background-image:radial-gradient(#c8261f 2px,transparent 3px),radial-gradient(#3f6fb0 2px,transparent 3px),radial-gradient(#fff 2px,transparent 3px);background-size:38px 38px,52px 52px,44px 44px;background-position:0 0,12px 20px,26px 8px;animation:confetti 3s linear calc(0s - var(--el)) both}
+@keyframes confetti{0%{opacity:1;background-position:0 -40px,12px -20px,26px -30px}80%{opacity:1}100%{opacity:0;background-position:0 60px,12px 90px,26px 70px}}
+.sc-gift{transform-origin:50% 100%;animation:giftBounce .6s ease-in-out calc(3s - var(--el)) 8 alternate both}
+@keyframes giftBounce{from{transform:translateY(0)}to{transform:translateY(-8px) rotate(-3deg)}}
+.sc-inside{opacity:0;animation:fadeIn .1s linear var(--dl) both}
+.sc-glid{transform-origin:50% 100%;animation:glid 1.2s ease-out var(--dl) both}
+@keyframes glid{from{transform:none;opacity:1}to{transform:translate(-60px,-150px) rotate(-70deg);opacity:0}}
+.sc-spring{transform-origin:50% 100%;opacity:0;animation:spring 1s cubic-bezier(.3,1.8,.5,1) var(--dl) both}
+@keyframes spring{from{opacity:1;transform:scaleY(0)}to{opacity:1;transform:scaleY(1)}}
+.sc-harm{transform-origin:100% 0%;animation:wave 1s ease-in-out infinite alternate}@keyframes wave{from{transform:rotate(6deg)}to{transform:rotate(-14deg)}}
+.sc-hermes{animation:hIn .8s ease-out calc(0s - var(--el)) both,hOut 1.2s ease-in var(--dl) both}
+@keyframes hIn{from{transform:translateX(90px)}to{transform:none}}
+@keyframes hOut{0%{transform:none}20%{transform:translateX(-8px)}100%{transform:translateX(170px)}}
+.sc-sandals{animation:steal 1.8s ease-in var(--dl) both}@keyframes steal{0%{transform:none}35%{transform:translate(48px,-28px) rotate(-20deg)}100%{transform:translate(220px,-28px) rotate(-20deg)}}
+.sc-speed{opacity:0;animation:speed 1.4s ease-out var(--dl) both}@keyframes speed{0%{opacity:0;transform:translateX(40px)}30%{opacity:1}100%{opacity:0;transform:translateX(-30px)}}
+@media (prefers-reduced-motion:reduce){.sc *{animation-duration:.01s!important;animation-iteration-count:1!important}}
+
+.sc-hourglass{transform-origin:50% 50%;animation:spin 2.4s ease-in-out infinite}

@@ -1,7 +1,7 @@
 // API du jeu Thesaurus Genavensis : parties, groupes, synchronisation, malédictions, actions enseignant.
 import { store } from "../lib/store.mjs";
 
-const CURSES = ["meduse", "sphinx", "dedale", "brouillard", "tantale", "pandore"];
+const CURSES = ["meduse", "colere", "sphinx", "dedale", "brouillard", "tantale", "pandore"];
 const BOONS = { don5: 5, don10: 10, egide: 15, apollon: 8 };
 const ZEUS_BOONS = ["don5", "don10", "egide", "miroir", "apollon"];
 const MAX_GROUPS = 8;
@@ -178,7 +178,7 @@ const routes = {
     const type = clean(b.type, 20), kind = b.kind === "boon" ? "boon" : "curse";
     if (kind === "curse" && !CURSES.includes(type)) return fail("Malédiction inconnue.");
     if (kind === "boon" && !ZEUS_BOONS.includes(type)) return fail("Bienfait inconnu.");
-    const c = { id: tid(), kind, type, zeus: true, from: "zeus", fromName: "Zeus", to: target.gid, toName: target.name, ts: now, reason: clean(b.reason, 80) };
+    const c = { id: tid(), kind, type, zeus: true, from: "zeus", fromName: "Zeus", to: target.gid, toName: target.name, ts: now, reason: clean(b.reason, 80), scene: clean(b.scene, 20) || undefined };
     await s.setJSON(k.curse(target.gid, c.id), c);
     return json({ ok: true, item: c });
   },

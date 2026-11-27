@@ -1,6 +1,7 @@
 /* Thesaurus Genavensis — jeu élève (chasse au trésor + malédictions entre groupes) */
 (() => {
-const { QUIZ, SPHINX, CURSES, PROTECTIONS, BOONS } = window.TG;
+const { QUIZ, SPHINX, CURSES, PROTECTIONS, BOONS, SCENES } = window.TG;
+const scene = id => SCENES.find(x => x.id === id);
 const ZONES = ['cour', '113', '114', '115', '0203', '408'];
 const N = 8, DUR = 300, H1 = 90, H2 = 180, H3 = 270, LOCK = 15, SYNC_MS = 3000;
 const KEY = 'thesaurus-netlify-v1';
@@ -50,7 +51,7 @@ setInterval(sync, SYNC_MS);
 
 /* ---------- vidéos ---------- */
 async function probe(url) { if (!url || url in VID) return; VID[url] = null; try { const r = await fetch(url, { method: 'HEAD' }); VID[url] = r.ok && /video/.test(r.headers.get('content-type') || 'video') } catch (e) { VID[url] = false } }
-QUIZ.forEach(q => probe(q.video)); Object.values(CURSES).forEach(c => probe(c.video));
+QUIZ.forEach(q => probe(q.video)); Object.values(CURSES).forEach(c => probe(c.video)); SCENES.forEach(x => probe(x.video));
 
 /* ---------- correction des réponses libres ---------- */
 function toks(s) { return String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[’'`-]/g, ' ').replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(t => t && !STOP.has(t)).map(t => t.length > 3 && /[sx]$/.test(t) && !/^[ivxlc]+$/.test(t) ? t.slice(0, -1) : t) }
@@ -116,7 +117,7 @@ function incoming(c) {
   const nom = (c.zeus ? 'Foudre de Zeus : ' : '') + (CURSES[c.type]?.nom || c.type);
   const from = c.zeus ? 'envoyée par Zeus en personne' : c.reflected ? `renvoyée par le Miroir de ${c.fromName}` : `lancée par ${c.fromName}`;
   if (S.screen === 'end') { addLog('recv', `${nom} (${from}) — sans effet, chasse terminée`); return }
-  if (c.zeus) { addLog('recv', `${nom} (${from})${c.reason ? ' — motif : ' + c.reason : ''}`); toast(`Zeus vous foudroie ! ${CURSES[c.type].nom}.${c.reason ? ' Motif : ' + c.reason + '.' : ''}`, true); applyCurse(c.type, 'Zeus', c.reason); return }
+  if (c.zeus) { addLog('recv', `${nom} (${from})${c.reason ? ' — motif : ' + c.reason : ''}`); toast(`Zeus vous foudroie ! ${CURSES[c.type].nom}.${c.reason ? ' Motif : ' + c.reason + '.' : ''}`, true); applyCurse(c.type, 'Zeus', c.reason, c.scene); return }
   if (S.prot.egide) {
     S.prot.egide = 0; addLog('blocked', `${nom} ${from} : bloquée par l'Égide`);
     toast(`L'Égide d'Athéna bloque ${nom} de ${c.fromName} !`);
@@ -148,7 +149,12 @@ function applyBoon(c) {
   addLog('boon', msg); toast(msg); buzz([60, 40, 60]); save();
   if (S.screen === 'q') updateQ(true); else if (S.screen !== 'end') render();
 }
-function applyCurse(type, fromName, reason) {
+function pickScene() {
+  const pool = SCENES.filter(x => x.id !== 'meduse'), seen = S.seenScenes || [];
+  const fresh = pool.filter(x => !seen.includes(x.id)), list = fresh.length ? fresh : pool;
+  return list[Math.floor(Math.random() * list.length)].id;
+}
+function applyCurse(type, fromName, reason, sceneId) {
   const st = cur(), inQ = S.screen === 'q' && st && st.t0;
   const nom = CURSES[type].nom;
   if (type === 'pandore') {
@@ -156,12 +162,17 @@ function applyCurse(type, fromName, reason) {
     let result;
     if (r < 0.15) { S.sesterces += 8; result = { gift: 'Un trésor ! +8 sesterces.' } }
     else if (r < 0.3) { if (!S.prot.egide) { S.prot.egide = 1; result = { gift: 'Un cadeau des dieux : vous recevez une Égide d\'Athéna !' } } else { S.sesterces += 8; result = { gift: 'Un trésor ! +8 sesterces.' } } }
-    else result = { curse: shuffle(['meduse', 'sphinx', 'dedale', 'brouillard', 'tantale'])[0] };
+    else result = { curse: shuffle(['meduse', 'colere', 'sphinx', 'dedale', 'brouillard', 'tantale'])[0] };
     S.queue.push({ kind: 'pandore', from: fromName, result, reason });
     if (result.gift) addLog('gift', 'Boîte de Pandore : ' + result.gift);
     save(); showOverlay(); return;
   }
-  if (type === 'meduse' || type === 'sphinx') {
+  if (type === 'meduse' || type === 'colere') {
+    const id = type === 'meduse' ? 'meduse' : (sceneId && scene(sceneId) ? sceneId : pickScene());
+    S.seenScenes = (S.seenScenes || []).concat(id).slice(-20);
+    S.queue.push({ kind: 'scene', scene: id, from: fromName, reason, phase: 'play' }); save(); showOverlay(); return;
+  }
+  if (type === 'sphinx') {
     const item = { kind: type, from: fromName, reason };
     if (type === 'sphinx') { const sq = SPHINX[Math.floor(Math.random() * SPHINX.length)]; item.q = SPHINX.indexOf(sq); item.opts = shuffle([sq.ok, ...sq.bad]); item.wrong = []; item.lockUntil = 0 }
     S.queue.push(item); save(); showOverlay(); return;
@@ -178,12 +189,36 @@ function showOverlay() {
   const ov = $('#ov'), it = (S.queue || [])[0];
   if (!it) { ov.hidden = true; ov.innerHTML = ''; return }
   ov.hidden = false;
-  if (it.kind === 'meduse') {
+  if (it.kind === 'scene') {
+    const sc = scene(it.scene) || SCENES[0];
     if (!it.started) { it.started = Date.now(); save(); buzz([400, 100, 400]) }
-    const v = CURSES.meduse.video, hasV = VID[v];
-    ov.innerHTML = `<div class="overlay"><div class="ov"><h2>Regard de Méduse</h2><p>${esc(it.from)} vous a pétrifiés !</p>${it.reason ? `<p style="font-size:20px;color:#ffd27a">Motif : ${esc(it.reason)}</p>` : ''}
-      ${hasV ? `<video src="${v}" autoplay muted playsinline loop></video>` : `<div class="stone">Pétrifiés</div>`}
-      <div class="cd" id="ovcd">20</div><p class="small">Impossible de passer. Votre chrono continue…</p></div></div>`;
+    const el = (Date.now() - it.started) / 1000;
+    if (it.phase === 'play' && el >= sc.dur) { it.phase = 'fact'; save() }
+    if (it.phase === 'play') {
+      const hasV = VID[sc.video];
+      ov.innerHTML = `<div class="overlay"><div class="ov">
+        <h2>${esc(sc.nom)}</h2><p>${it.from === 'Zeus' ? 'Zeus en personne vous retient !' : `Envoyé par ${esc(it.from)}.`}${it.reason ? ` <span style="color:#ffd27a">Motif : ${esc(it.reason)}</span>` : ''}</p>
+        ${hasV ? `<video class="sc-video" id="scv" src="${sc.video}" autoplay muted playsinline></video>` : window.TGScenes.html(sc.id, el)}
+        <div class="sc-cap" id="sccap" aria-live="polite"></div>
+        <div class="sc-meta"><span>Impossible de passer : votre chrono continue.</span><span class="cd" id="ovcd"></span></div>
+        ${hasV ? '<button class="btn ghost sm" id="scsound" style="color:#f0c9e6;border-color:#f0c9e6">Activer le son (écouteurs)</button>' : ''}
+      </div></div>`;
+      const v = $('#scv'); if (v) { try { v.currentTime = Math.min(el, sc.dur - .5) } catch (e) {} }
+      const sb = $('#scsound'); if (sb) sb.onclick = () => { v.muted = false; v.play().catch(() => {}); sb.hidden = true };
+      tickScene(it, sc);
+    } else {
+      const f = sc.flash, opts = it.opts || (it.opts = shuffle([f.ok, ...f.bad]));
+      ov.innerHTML = `<div class="overlay"><div class="ov">
+        <h2>${esc(sc.nom)}</h2>
+        <div class="fact"><h3>Le savais-tu ?</h3><p>${esc(sc.fact)}</p>${sc.voir ? `<p class="voir">À voir au musée : ${esc(sc.voir)}.</p>` : ''}</div>
+        <div class="fact"><h3>Question flash</h3><p>${esc(f.q)}</p><p class="small" style="color:#d9c8e6">Bonne réponse du premier coup : +2 sesterces.</p>
+          <div class="opts">${opts.map((o, k) => `<button class="opt${o === f.ok ? ' good' : ''}" data-k="${k}" ${it.answer != null ? 'disabled' : ''} ${it.answer != null && o === f.ok ? 'style="border-color:#6cc58f;background:#173326"' : ''}>${esc(o)}</button>`).join('')}</div>
+          ${it.answer != null ? `<p style="color:${it.answer ? '#6cc58f' : '#ffb4ab'}">${it.answer ? 'Bravo ! +2 sesterces.' : `Raté : c'était « ${esc(f.ok)} ».`}</p>` : ''}</div>
+        <button class="btn gold" id="scdone" ${it.answer == null ? 'disabled' : ''}>Reprendre la chasse</button>
+      </div></div>`;
+      ov.querySelector('.opts').onclick = e => { const b = e.target.closest('.opt'); if (!b || it.answer != null) return; const ok = opts[+b.dataset.k] === f.ok; it.answer = ok; if (ok) { S.sesterces += 2; addLog('boon', `Question flash réussie (${sc.nom}) : +2 sesterces`) } save(); showOverlay() };
+      $('#scdone').onclick = () => { S.queue.shift(); save(); render(); showOverlay() };
+    }
   } else if (it.kind === 'sphinx') {
     const sq = SPHINX[it.q], v = CURSES.sphinx.video;
     ov.innerHTML = `<div class="overlay"><div class="ov"><h2>Énigme du Sphinx</h2><p>${esc(it.from)} a envoyé le Sphinx. Répondez juste pour passer !</p>${it.reason ? `<p style="color:#ffd27a">Motif : ${esc(it.reason)}</p>` : ''}
@@ -207,9 +242,16 @@ function showOverlay() {
 function tickOverlay() {
   const it = S.queue && S.queue[0]; if (!it) return;
   if ($('#ov').hidden) showOverlay();
-  if (it.kind === 'meduse') { const left = Math.ceil(20 - (Date.now() - it.started) / 1000); const cd = $('#ovcd'); if (cd) cd.textContent = Math.max(0, left); if (left <= 0) { S.queue.shift(); save(); showOverlay() } }
+  if (it.kind === 'scene' && it.phase === 'play') { const sc = scene(it.scene) || SCENES[0]; if ((Date.now() - it.started) / 1000 >= sc.dur) { it.phase = 'fact'; save(); showOverlay() } else tickScene(it, sc) }
   if (it.kind === 'sphinx') { const l = $('#ovlock'), rem = Math.ceil((it.lockUntil - Date.now()) / 1000); if (l) { l.hidden = rem <= 0; l.textContent = `Faux ! Le Sphinx vous bloque encore ${rem} s.` } }
   if (it.kind === 'pandore' && !$('#ovok') && Date.now() - it.opened > 3500) showOverlay();
+}
+
+function tickScene(it, sc) {
+  const el = (Date.now() - it.started) / 1000, cap = $('#sccap'), cd = $('#ovcd');
+  if (cd) cd.textContent = Math.max(0, Math.ceil(sc.dur - el)) + ' s';
+  if (cap) { let t = ''; for (const [s, txt] of sc.captions) if (el >= s) t = txt; if (cap.textContent !== t) cap.textContent = t }
+  window.TGScenes.tick(sc.id, el, document.querySelector('#ov .sc'));
 }
 
 /* ---------- Temple ---------- */
@@ -479,6 +521,7 @@ function bind() {
 }
 
 setInterval(() => { if (S.screen === 'q') updateQ(false); tickOverlay() }, 500);
+setInterval(() => { const it = S.queue && S.queue[0]; if (it && it.kind === 'scene' && it.phase === 'play' && !$('#ov').hidden) tickScene(it, scene(it.scene) || SCENES[0]) }, 100);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { sync(); if (S.screen === 'q') updateQ(true) } });
 render(); showOverlay(); sync();
 })();

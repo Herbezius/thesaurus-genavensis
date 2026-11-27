@@ -1,6 +1,6 @@
 /* Thesaurus Genavensis — tableau de bord enseignant */
 (() => {
-const { QUIZ, CURSES, BOONS, PROTECTIONS } = window.TG;
+const { QUIZ, CURSES, BOONS, PROTECTIONS, SCENES } = window.TG;
 const ZSEL = {}, ZMOT = {};
 const MOTIFS_MAL = ['On ne court pas au musée', 'On ne crie pas', 'On ne dérange pas les autres visiteurs', 'On ne touche pas les œuvres', 'On reste groupés', 'Téléphone utilisé hors du jeu'];
 const MOTIFS_BIEN = ['Bravo pour votre calme', 'Belle entraide', 'Excellente observation', 'Groupe exemplaire'];
@@ -36,7 +36,7 @@ function render() {
   if (!P) { a.innerHTML = loginHtml(); bindLogin(); return }
   a.innerHTML = `
 <header class="top"><div><div class="eyebrow">Espace enseignant</div><h1>Thesaurus Genavensis</h1></div>
- <div class="tabs" role="group" aria-label="Rubriques">${[['live', 'Olympe'], ['rep', 'Repérage'], ['sol', 'Solutions']].map(([k, l]) => `<button data-t="${k}" aria-pressed="${TAB === k}">${l}</button>`).join('')}</div></header>
+ <div class="tabs" role="group" aria-label="Rubriques">${[['live', 'Olympe'], ['rep', 'Repérage'], ['sol', 'Solutions']].map(([k, l]) => `<button data-t="${k}" aria-pressed="${TAB === k}">${l}</button>`).join('')}<a class="btn ghost" href="apercu.html" target="_blank" rel="noopener" style="text-decoration:none">Scènes de la Colère ↗</a></div></header>
 <div id="tab"></div>`;
   a.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { TAB = b.dataset.t; render() });
   if (TAB === 'live') drawLive(); else if (TAB === 'rep') drawRep(); else drawSol();
@@ -112,7 +112,8 @@ function fillLive() {
   const box = $('#groups');
   if (!box.contains(document.activeElement)) {
     const zeusOpts = `<option value="">Action de Zeus…</option>
-      <optgroup label="Foudre (malédiction)">${Object.entries(CURSES).map(([k, c]) => `<option value="curse:${k}">${esc(c.nom)}</option>`).join('')}</optgroup>
+      <optgroup label="Foudre (malédiction)">${Object.entries(CURSES).map(([k, c]) => `<option value="curse:${k}">${esc(c.nom)}${k === 'colere' ? ' (au hasard)' : ''}</option>`).join('')}</optgroup>
+      <optgroup label="Colère des dieux : scène précise">${SCENES.filter(x => x.id !== 'meduse').map(x => `<option value="scene:${x.id}">${esc(x.nom)}</option>`).join('')}</optgroup>
       <optgroup label="Bienfait">${['don5', 'don10', 'egide', 'apollon'].map(k => `<option value="boon:${k}">${esc(BOONS[k].nom)}</option>`).join('')}<option value="boon:miroir">${esc(PROTECTIONS.miroir.nom)}</option></optgroup>
       <optgroup label="Sesterces">${[5, 10, -5, -10].map(n => `<option value="adj:${n}">${n > 0 ? '+' : '−'}${Math.abs(n)} sesterces</option>`).join('')}</optgroup>`;
     const motifOpts = `<option value="">Sans motif</option><optgroup label="Rappel à l'ordre">${MOTIFS_MAL.map(m => `<option>${esc(m)}</option>`).join('')}</optgroup><optgroup label="Félicitations">${MOTIFS_BIEN.map(m => `<option>${esc(m)}</option>`).join('')}</optgroup>`;
@@ -134,7 +135,7 @@ function fillLive() {
     box.querySelectorAll('[data-m]').forEach(sel => { if (ZMOT[sel.dataset.m]) sel.value = ZMOT[sel.dataset.m]; sel.onchange = () => { ZMOT[sel.dataset.m] = sel.value } });
     box.querySelectorAll('[data-zgo]').forEach(btn => btn.onclick = () => zeus(btn.dataset.zgo, box.querySelector(`[data-z="${btn.dataset.zgo}"]`).value, box.querySelector(`[data-m="${btn.dataset.zgo}"]`).value));
   }
-  const nomOf = c => c.type === 'note' ? esc(c.text) : c.kind === 'boon' ? '<span style="color:var(--verd)">' + esc((BOONS[c.type] || PROTECTIONS[c.type] || {}).nom || c.type) + '</span>' : esc(CURSES[c.type]?.nom || c.type) + (c.reflected ? ' <span class="small" style="color:var(--curse)">(renvoyée par le Miroir)</span>' : '');
+  const nomOf = c => c.type === 'note' ? esc(c.text) : c.kind === 'boon' ? '<span style="color:var(--verd)">' + esc((BOONS[c.type] || PROTECTIONS[c.type] || {}).nom || c.type) + '</span>' : esc(CURSES[c.type]?.nom || c.type) + (c.scene ? ' : ' + esc((SCENES.find(x => x.id === c.scene) || {}).nom || c.scene) : '') + (c.reflected ? ' <span class="small" style="color:var(--curse)">(renvoyée par le Miroir)</span>' : '');
   $('#feed').innerHTML = BD.curses.length ? BD.curses.map(c => `<div><span class="muted small">${hm(c.ts)}</span> <b>${c.zeus ? 'Zeus' : esc(c.fromName)}</b> → <b>${esc(c.toName)}</b> : ${nomOf(c)}${c.reason ? ` <span class="small muted">(${esc(c.reason)})</span>` : ''}</div>`).join('') : '<p class="muted">Rien pour l\'instant.</p>';
 }
 async function zeus(gid, v, motif) {
@@ -142,6 +143,7 @@ async function zeus(gid, v, motif) {
   const [kind, type] = v.split(':'); const g = BD.groups.find(x => x.gid === gid);
   try {
     if (kind === 'adj') await api('prof/adjust', { ...auth(), gid, amount: +type, reason: (+type < 0 ? 'Colère de Zeus' : 'Générosité de Zeus') + (motif ? ' : ' + motif : '') });
+    else if (kind === 'scene') await api('prof/zeus', { ...auth(), gid, kind: 'curse', type: 'colere', scene: type, reason: motif });
     else await api('prof/zeus', { ...auth(), gid, kind, type, reason: motif });
     toast(`Zeus a frappé : ${g ? g.name : ''}.`); ZSEL[gid] = ''; ZMOT[gid] = ''; poll();
   } catch (x) { toast(x.message) }
